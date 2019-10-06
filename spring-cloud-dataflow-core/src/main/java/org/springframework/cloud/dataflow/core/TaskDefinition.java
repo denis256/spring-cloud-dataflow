@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2017 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,15 @@
 package org.springframework.cloud.dataflow.core;
 
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
+
+import javax.persistence.Column;
+import javax.persistence.Entity;
+import javax.persistence.Id;
+import javax.persistence.Lob;
+import javax.persistence.PostLoad;
+import javax.persistence.Table;
 
 import org.springframework.cloud.dataflow.core.dsl.ArgumentNode;
 import org.springframework.cloud.dataflow.core.dsl.TaskAppNode;
@@ -33,23 +41,67 @@ import org.springframework.util.Assert;
  * @author Glenn Renfro
  * @author Andy Clement
  */
+@Entity
+@Table(name = "TASK_DEFINITIONS")
 public class TaskDefinition extends DataFlowAppDefinition {
 
 	public static final String SPRING_CLOUD_TASK_NAME = "spring.cloud.task.name";
 
 	/**
-	 * DSL text for the module.
+	 * Name of task.
 	 */
-	private final String dslText;
+	@Id
+	@Column(name = "DEFINITION_NAME")
+	private String taskName;
+
+	/**
+	 * DSL definition for stream.
+	 */
+	@Column(name = "DEFINITION")
+	@Lob
+	private String dslText;
+
+	/**
+	 * Description of the definition (Optional).
+	 */
+	@Column(name = "DESCRIPTION")
+	private String description;
+
+	public TaskDefinition() {
+	}
 
 	TaskDefinition(String registeredAppName, String label, Map<String, String> properties) {
-		super(registeredAppName, label, properties);
+		super(registeredAppName, label, ApplicationType.task, properties);
+		this.taskName = registeredAppName;
 		this.dslText = "";
 	}
 
-	public TaskDefinition(String name, String dsl) {
+	/**
+	 * Construct a {@code TaskDefinition}
+	 *
+	 * @param name task definition name
+	 * @param registeredAppName the application name
+	 * @param label the label associated with the definition
+	 * @param properties the properties for the definition
+	 * @param dsl task definition DSL expression
+	 * @since 2.3
+	 */
+	TaskDefinition(String name, String registeredAppName, String label, Map<String, String> properties, String dsl) {
+		super(registeredAppName, label, ApplicationType.task, properties);
+		this.taskName = name;
 		this.dslText = dsl;
-		Map<String, String> properties = new HashMap<>();
+	}
+
+	/**
+	 * Construct a {@code TaskDefinition}
+	 *
+	 * @param name task definition name
+	 * @param dsl task definition DSL expression
+	 */
+	public TaskDefinition(String name, String dsl) {
+		this.taskName = name;
+		this.dslText = dsl;
+		Map<String, String> properties = new LinkedHashMap<>();
 		TaskNode taskNode = new TaskParser(name, dsl, true, true).parse();
 		if (taskNode.isComposed()) {
 			setRegisteredAppName(name);
@@ -67,8 +119,48 @@ public class TaskDefinition extends DataFlowAppDefinition {
 		this.appDefinition = new AppDefinition(name, properties);
 	}
 
+	/**
+	 * Construct a {@code TaskDefinition}
+	 *
+	 * @param name task definition name
+	 * @param dsl task definition DSL expression
+	 * @param description description of the definition
+	 */
+	public TaskDefinition(String name, String dsl, String description) {
+		this(name, dsl);
+		this.description = description;
+	}
+
+	public String getDescription() {
+		return description;
+	}
+
+	public String getTaskName() {
+		return this.taskName;
+	}
+
 	public String getDslText() {
 		return dslText;
+	}
+
+	@PostLoad
+	public void initialize() {
+		Map<String, String> properties = new HashMap<>();
+		TaskNode taskNode = new TaskParser(this.taskName, this.dslText, true, true).parse();
+		if (taskNode.isComposed()) {
+			setRegisteredAppName(this.taskName);
+		}
+		else {
+			TaskAppNode singleTaskApp = taskNode.getTaskApp();
+			setRegisteredAppName(singleTaskApp.getName());
+			if (singleTaskApp.hasArguments()) {
+				for (ArgumentNode argumentNode : singleTaskApp.getArguments()) {
+					properties.put(argumentNode.getName(), argumentNode.getValue());
+				}
+			}
+		}
+		properties.put(SPRING_CLOUD_TASK_NAME, this.taskName);
+		this.appDefinition = new AppDefinition(this.taskName, properties);
 	}
 
 	@Override
@@ -124,6 +216,10 @@ public class TaskDefinition extends DataFlowAppDefinition {
 		 */
 		private String label;
 
+		private String dslText;
+
+		private String taskName;
+
 		/**
 		 * Create a new builder that is initialized with properties of the given
 		 * definition. Useful for "mutating" a definition by building a slightly different
@@ -149,6 +245,32 @@ public class TaskDefinition extends DataFlowAppDefinition {
 		 */
 		public TaskDefinitionBuilder setProperty(String name, String value) {
 			this.properties.put(name, value);
+			return this;
+		}
+
+		/**
+		 * Establish the DSL Text for a task definition.
+		 *
+		 * @param dslText the dsl to be used by the TaskDefinition
+		 * @return this builder object
+		 *
+		 * @since 2.3
+		 */
+		public TaskDefinitionBuilder setDslText(String dslText) {
+			this.dslText = dslText;
+			return this;
+		}
+
+		/**
+		 * Establish the task name for a task definition.
+		 *
+		 * @param taskName the name to be used by the TaskDefinition
+		 * @return this builder object
+		 * @see AppDefinition#getProperties()
+		 * @since 2.3
+		 */
+		public TaskDefinitionBuilder setTaskName(String taskName) {
+			this.taskName = taskName;
 			return this;
 		}
 
@@ -239,7 +361,7 @@ public class TaskDefinition extends DataFlowAppDefinition {
 			if (this.label == null) {
 				this.label = this.registeredAppName;
 			}
-			return new TaskDefinition(this.registeredAppName, this.label, this.properties);
+			return new TaskDefinition(this.taskName, this.registeredAppName, this.label, this.properties, this.dslText);
 		}
 	}
 }

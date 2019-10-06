@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -85,6 +85,28 @@ public class SqlPagingQueryUtils {
 		else {
 			sql.append(provider.getWhereClause() == null ? "" : " WHERE " + provider.getWhereClause());
 		}
+	}
+
+
+	/**
+	 * Generate SQL query string using a TOP clause
+	 *
+	 * @param provider {@link org.springframework.batch.item.database.support.AbstractSqlPagingQueryProvider} providing the
+	 * implementation specifics
+	 * @param remainingPageQuery is this query for the remaining pages (true) as
+	 * opposed to the first page (false)
+	 * @param topClause the implementation specific top clause to be used
+	 * @return the generated query
+	 */
+	public static String generateTopSqlQuery(AbstractSqlPagingQueryProvider provider, boolean remainingPageQuery,
+			String topClause) {
+		StringBuilder sql = new StringBuilder();
+		sql.append("SELECT ").append(topClause).append(" ").append(provider.getSelectClause());
+		sql.append(" FROM ").append(provider.getFromClause());
+		buildWhereClause(provider, remainingPageQuery, sql);
+		sql.append(" ORDER BY ").append(buildSortClause(provider));
+
+		return sql.toString();
 	}
 
 	/**

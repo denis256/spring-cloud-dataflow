@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,10 +18,10 @@ package org.springframework.cloud.dataflow.completion;
 
 import java.util.List;
 
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.dsl.CheckPointedParseException;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 
 /**
  * Proposes source app names when the user has typed nothing.
@@ -33,9 +33,9 @@ import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
 class EmptyStartYieldsSourceAppsTaskRecoveryStrategy
 		extends StacktraceFingerprintingTaskRecoveryStrategy<CheckPointedParseException> {
 
-	private final AppRegistryCommon registry;
+	private final AppRegistryService registry;
 
-	public EmptyStartYieldsSourceAppsTaskRecoveryStrategy(AppRegistryCommon registry) {
+	public EmptyStartYieldsSourceAppsTaskRecoveryStrategy(AppRegistryService registry) {
 		super(CheckPointedParseException.class, "");
 		this.registry = registry;
 	}

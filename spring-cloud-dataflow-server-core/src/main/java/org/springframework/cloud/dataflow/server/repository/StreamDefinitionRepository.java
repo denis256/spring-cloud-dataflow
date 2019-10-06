@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,17 +17,18 @@
 package org.springframework.cloud.dataflow.server.repository;
 
 import org.springframework.cloud.dataflow.core.StreamDefinition;
-import org.springframework.cloud.dataflow.server.repository.support.SearchPageable;
 import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.PagingAndSortingRepository;
 import org.springframework.stereotype.Repository;
 
 /**
+ * Repository to access {@link StreamDefinition}s.
+ *
  * @author Mark Fisher
  */
 @Repository
 public interface StreamDefinitionRepository extends PagingAndSortingRepository<StreamDefinition, String> {
 
-	Page<StreamDefinition> search(SearchPageable searchPageable);
-
+	Page<StreamDefinition> findByNameContains(String name, Pageable pageable);
 }

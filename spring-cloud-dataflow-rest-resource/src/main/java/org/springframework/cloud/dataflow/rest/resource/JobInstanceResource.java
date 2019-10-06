@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,8 +19,8 @@ package org.springframework.cloud.dataflow.rest.resource;
 import java.util.Collections;
 import java.util.List;
 
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 import org.springframework.util.Assert;
 
 /**
@@ -28,7 +28,7 @@ import org.springframework.util.Assert;
  *
  * @author Glenn Renfro
  */
-public class JobInstanceResource extends ResourceSupport {
+public class JobInstanceResource extends RepresentationModel<JobInstanceResource> {
 
 	private String jobName;
 
@@ -68,6 +68,6 @@ public class JobInstanceResource extends ResourceSupport {
 		return jobExecutions;
 	}
 
-	public static class Page extends PagedResources<JobInstanceResource> {
+	public static class Page extends PagedModel<JobInstanceResource> {
 	}
 }

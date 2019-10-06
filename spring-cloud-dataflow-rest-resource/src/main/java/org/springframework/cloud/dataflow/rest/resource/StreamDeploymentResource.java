@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,8 +16,8 @@
 
 package org.springframework.cloud.dataflow.rest.resource;
 
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 
 /**
  * A HATEOAS representation of a stream deployment.
@@ -25,7 +25,7 @@ import org.springframework.hateoas.ResourceSupport;
  * @author Eric Bottard
  * @author Ilayaperumal Gopinathan
  */
-public class StreamDeploymentResource extends ResourceSupport {
+public class StreamDeploymentResource extends RepresentationModel<StreamDeploymentResource> {
 
 	/**
 	 * The name of the stream under deployment.
@@ -36,6 +36,11 @@ public class StreamDeploymentResource extends ResourceSupport {
 	 * Stream definition DSL text.
 	 */
 	private String dslText;
+
+	/**
+	 * Stream description text.
+	 */
+	private String description;
 
 	/**
 	 * Stream status (i.e. deployed, undeployed, etc).
@@ -68,6 +73,11 @@ public class StreamDeploymentResource extends ResourceSupport {
 		this.status = status;
 	}
 
+	public StreamDeploymentResource(String streamName, String dslText, String description, String deploymentProperties, String status) {
+		this(streamName, dslText, deploymentProperties, status);
+		this.description = description;
+	}
+
 	public String getStreamName() {
 		return streamName;
 	}
@@ -84,7 +94,11 @@ public class StreamDeploymentResource extends ResourceSupport {
 		return status;
 	}
 
-	public static class Page extends PagedResources<StreamDeploymentResource> {
+	public String getDescription() {
+		return description;
+	}
+
+	public static class Page extends PagedModel<StreamDeploymentResource> {
 
 	}
 

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,7 @@ import org.springframework.util.Assert;
 /**
  * @author Vinicius Carvalho
  *
- * Utility class to help building a Map of classic mode based deployment properties
+ * Utility class to help building a Map of deployment properties
  */
 public class DeploymentPropertiesBuilder extends AbstractPropertiesBuilder{
 
@@ -45,7 +45,7 @@ public class DeploymentPropertiesBuilder extends AbstractPropertiesBuilder{
 	 * @param label - The application name or label to configure the number of instances
 	 * @param memory - Memory size in Mb, must be greater or equal 128
 	 *
-	 * @return
+	 * @return the instance of this DeploymentPropertiesBuilder
 	 */
 	public DeploymentPropertiesBuilder memory(String label, Integer memory){
 		Assert.notNull(memory, "Memory value can't be null");
@@ -61,7 +61,7 @@ public class DeploymentPropertiesBuilder extends AbstractPropertiesBuilder{
 	 * @param label - The application name or label to configure the number of instances
 	 * @param instances - Number of instances, must be greater than zero
 	 *
-	 * @return
+	 * @return the instance of this DeploymentPropertiesBuilder
 	 */
 	public DeploymentPropertiesBuilder count(String label, Integer instances) {
 		Assert.notNull(instances, "Number of instances can't be null");

@@ -7,9 +7,7 @@
 This section goes into more detail about how you can work with Spring Cloud Stream. It covers topics
 such as creating and running stream applications.
 
-If you're just starting out with Spring Cloud Data Flow, you should probably read the
-_<<getting-started.adoc#getting-started, Getting Started>>_ guide before diving into
-this section.
+If you're just starting out with Spring Cloud Data Flow, you should probably read the Getting Started guide for  "`<<getting-started-local.adoc#getting-started-local, Local>>`" , "`<<getting-started-cloudfoundry.adoc#getting-started-cloudfoundry, Cloud Foundry>>`", "`<<getting-started-kubernetes.adoc#getting-started-kubernetes, Kubernetes>>`" before diving into this section.
 --
 
 == Introducing Spring Cloud Stream
@@ -79,4 +77,4 @@ public class TimerSourceApplicationTests {
 NOTE: In this case there is only one `Source` in the application context so there is no need to qualify it when it is autowired. If there is ambiguity, e.g. if you are composing one app from some others, you can use the `@Bindings` qualifier to inject a specific channel set. The `@Bindings` qualifier takes a parameter which is the class that carries the `@EnableBinding` annotation (in this case the `TimerSource`).
 
 For more information, including how to run `spring-cloud-stream` applications autonomously (without Spring Cloud Data Flow),
-visit the link:http://cloud.spring.io/spring-cloud-stream[Spring Cloud Stream project home page].
+visit the link:https://cloud.spring.io/spring-cloud-stream[Spring Cloud Stream project home page].

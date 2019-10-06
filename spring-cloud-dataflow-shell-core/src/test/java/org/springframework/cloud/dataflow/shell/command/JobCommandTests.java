@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,6 +24,7 @@ import java.util.Map;
 
 import javax.sql.DataSource;
 
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -42,6 +43,7 @@ import org.springframework.cloud.task.batch.listener.support.JdbcTaskBatchDao;
 import org.springframework.cloud.task.repository.TaskExecution;
 import org.springframework.cloud.task.repository.dao.TaskExecutionDao;
 import org.springframework.cloud.task.repository.support.TaskExecutionDaoFactoryBean;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.shell.core.CommandResult;
 import org.springframework.shell.table.Table;
@@ -74,6 +76,8 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 
 	private static List<JobInstance> jobInstances = new ArrayList<>();
 
+	private static List<Long> taskExecutionIds = new ArrayList<>(3);
+
 	@BeforeClass
 	public static void setUp() throws Exception {
 		dataSource = applicationContext.getBean(DataSource.class);
@@ -84,13 +88,25 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 		jobRepository = repositoryFactoryBean.getObject();
 		TaskExecutionDaoFactoryBean taskExecutionDaoFactoryBean = new TaskExecutionDaoFactoryBean(dataSource);
 		dao = taskExecutionDaoFactoryBean.getObject();
-		createSampleJob(JOB_NAME_ORIG, 1);
-		createSampleJob(JOB_NAME_FOO, 1);
-		createSampleJob(JOB_NAME_FOOBAR, 2);
-
+		taskExecutionIds.add(createSampleJob(JOB_NAME_ORIG, 1));
+		taskExecutionIds.add(createSampleJob(JOB_NAME_FOO, 1));
+		taskExecutionIds.add(createSampleJob(JOB_NAME_FOOBAR, 2));
 	}
 
-	private static void createSampleJob(String jobName, int jobExecutionCount) {
+	@AfterClass
+	public static void tearDown() {
+		JdbcTemplate template = new JdbcTemplate(applicationContext.getBean(DataSource.class));
+		template.afterPropertiesSet();
+		final String TASK_EXECUTION_FORMAT = "DELETE FROM task_execution WHERE task_execution_id = %d";
+		final String TASK_BATCH_FORMAT = "DELETE FROM task_task_batch WHERE task_execution_id = %d";
+
+		for (Long id : taskExecutionIds) {
+			template.execute(String.format(TASK_BATCH_FORMAT, id));
+			template.execute(String.format(TASK_EXECUTION_FORMAT, id));
+		}
+	}
+
+	private static long createSampleJob(String jobName, int jobExecutionCount) {
 		JobInstance instance = jobRepository.createJobInstance(jobName, new JobParameters());
 		jobInstances.add(instance);
 		TaskExecution taskExecution = dao.createTaskExecution(jobName, new Date(), new ArrayList<String>(), null);
@@ -105,10 +121,11 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 			StepExecution stepExecution = new StepExecution("foobar", jobExecution);
 			jobRepository.add(stepExecution);
 		}
+		return taskExecution.getExecutionId();
 	}
 
 	@Test
-	public void testJobExecutionList() throws InterruptedException {
+	public void testJobExecutionList() {
 		logger.info("Retrieve Job Execution List Test");
 		Table table = getTable(job().jobExecutionList());
 		verifyColumnNumber(table, 6);
@@ -121,7 +138,7 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 	}
 
 	@Test
-	public void testJobExecutionListByName() throws InterruptedException {
+	public void testJobExecutionListByName() {
 		logger.info("Retrieve Job Execution List By Name Test");
 		Table table = getTable(job().jobExecutionListByName(JOB_NAME_FOOBAR));
 		verifyColumnNumber(table, 6);
@@ -134,7 +151,7 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 	}
 
 	@Test
-	public void testViewExecution() throws InterruptedException {
+	public void testViewExecution() {
 		logger.info("Retrieve Job Execution Detail by Id");
 
 		Table table = getTable(job().executionDisplay(getFirstJobExecutionIdFromTable()));
@@ -171,7 +188,7 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 	}
 
 	@Test
-	public void testViewInstance() throws InterruptedException {
+	public void testViewInstance() {
 		logger.info("Retrieve Job Instance Detail by Id");
 
 		Table table = getTable(job().instanceDisplay(jobInstances.get(0).getInstanceId()));
@@ -190,7 +207,7 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 	}
 
 	@Test
-	public void testJobStepExecutionList() throws InterruptedException {
+	public void testJobStepExecutionList() {
 		logger.info("Retrieve Job Step Execution List Test");
 
 		Table table = getTable(job().jobStepExecutionList(getFirstJobExecutionIdFromTable()));
@@ -204,7 +221,7 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 	}
 
 	@Test
-	public void testJobStepExecutionProgress() throws InterruptedException {
+	public void testJobStepExecutionProgress() {
 		logger.info("Retrieve Job Step Execution Progress Test");
 
 		long jobExecutionId = getFirstJobExecutionIdFromTable();
@@ -220,7 +237,7 @@ public class JobCommandTests extends AbstractShellIntegrationTest {
 	}
 
 	@Test
-	public void testStepExecutionView() throws InterruptedException {
+	public void testStepExecutionView() {
 		logger.info("Retrieve Job Execution Detail by Id");
 
 		long jobExecutionId = getFirstJobExecutionIdFromTable();

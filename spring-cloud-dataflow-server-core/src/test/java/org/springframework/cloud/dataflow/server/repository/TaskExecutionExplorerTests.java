@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2017 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,15 +28,16 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.EmbeddedDataSourceConfiguration;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cloud.dataflow.server.configuration.TaskDependencies;
+import org.springframework.cloud.dataflow.server.configuration.TaskServiceDependencies;
 import org.springframework.cloud.task.repository.TaskExecution;
 import org.springframework.cloud.task.repository.TaskExplorer;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.test.annotation.DirtiesContext.ClassMode;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.junit.Assert.assertEquals;
@@ -45,10 +46,12 @@ import static org.junit.Assert.assertEquals;
  * @author Glenn Renfro
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = { TaskDependencies.class, EmbeddedDataSourceConfiguration.class,
-		PropertyPlaceholderAutoConfiguration.class })
-@DirtiesContext
+@SpringBootTest(classes = { TaskServiceDependencies.class }, properties = {
+		"spring.main.allow-bean-definition-overriding=true" })
+@DirtiesContext(classMode = ClassMode.BEFORE_EACH_TEST_METHOD)
+@AutoConfigureTestDatabase(replace = Replace.ANY)
 public class TaskExecutionExplorerTests {
+
 	@Autowired
 	private DataSource dataSource;
 
@@ -79,7 +82,7 @@ public class TaskExecutionExplorerTests {
 		insertTestExecutionDataIntoRepo(template, 1L, "foo");
 		insertTestExecutionDataIntoRepo(template, 0L, "foo");
 
-		List<TaskExecution> resultList = explorer.findAll(new PageRequest(0, 10)).getContent();
+		List<TaskExecution> resultList = explorer.findAll(PageRequest.of(0, 10)).getContent();
 		assertEquals(String.format("expected %s entries returned from task_execution", ENTRY_COUNT), ENTRY_COUNT,
 				resultList.size());
 		Map<Long, TaskExecution> actual = new HashMap<>();
@@ -102,7 +105,7 @@ public class TaskExecutionExplorerTests {
 		insertTestExecutionDataIntoRepo(template, 1L, "baz");
 		insertTestExecutionDataIntoRepo(template, 0L, "fee");
 
-		List<TaskExecution> resultList = explorer.findTaskExecutionsByName("fee", new PageRequest(0, 10)).getContent();
+		List<TaskExecution> resultList = explorer.findTaskExecutionsByName("fee", PageRequest.of(0, 10)).getContent();
 		assertEquals("expected 1 entries returned from task_execution", 1, resultList.size());
 		TaskExecution taskExecution = resultList.get(0);
 		assertEquals("expected execution id does not match actual", 0, taskExecution.getExecutionId());

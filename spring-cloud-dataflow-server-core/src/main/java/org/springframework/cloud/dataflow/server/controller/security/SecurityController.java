@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2017 the original author or authors.
+ * Copyright 2016-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,8 +19,8 @@ package org.springframework.cloud.dataflow.server.controller.security;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.cloud.common.security.support.SecurityStateBean;
 import org.springframework.cloud.dataflow.rest.resource.security.SecurityInfoResource;
-import org.springframework.hateoas.ExposesResourceFor;
-import org.springframework.hateoas.mvc.ControllerLinkBuilder;
+import org.springframework.hateoas.server.ExposesResourceFor;
+import org.springframework.hateoas.server.mvc.WebMvcLinkBuilder;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AnonymousAuthenticationToken;
 import org.springframework.security.core.Authentication;
@@ -66,12 +66,10 @@ public class SecurityController {
 	public SecurityInfoResource getSecurityInfo() {
 
 		final boolean authenticationEnabled = securityStateBean.isAuthenticationEnabled();
-		final boolean authorizationEnabled = securityStateBean.isAuthorizationEnabled();
 
 		final SecurityInfoResource securityInfo = new SecurityInfoResource();
 		securityInfo.setAuthenticationEnabled(authenticationEnabled);
-		securityInfo.setAuthorizationEnabled(authorizationEnabled);
-		securityInfo.add(ControllerLinkBuilder.linkTo(SecurityController.class).withSelfRel());
+		securityInfo.add(WebMvcLinkBuilder.linkTo(SecurityController.class).withSelfRel());
 
 		if (authenticationEnabled && SecurityContextHolder.getContext() != null) {
 			final Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
@@ -79,17 +77,11 @@ public class SecurityController {
 				securityInfo.setAuthenticated(authentication.isAuthenticated());
 				securityInfo.setUsername(authentication.getName());
 
-				if (authorizationEnabled) {
-					for (GrantedAuthority authority : authentication.getAuthorities()) {
-						securityInfo.addRole(authority.getAuthority());
-					}
+				for (Object authority : authentication.getAuthorities()) {
+					final GrantedAuthority grantedAuthority = (GrantedAuthority) authority;
+					securityInfo.addRole(grantedAuthority.getAuthority());
 				}
-				if (this.oauthClientId == null) {
-					securityInfo.setFormLogin(true);
-				}
-				else {
-					securityInfo.setFormLogin(false);
-				}
+
 			}
 		}
 

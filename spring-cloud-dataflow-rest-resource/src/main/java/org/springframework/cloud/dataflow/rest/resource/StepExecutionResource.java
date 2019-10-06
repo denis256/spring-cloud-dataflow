@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,14 +17,14 @@
 package org.springframework.cloud.dataflow.rest.resource;
 
 import org.springframework.batch.core.StepExecution;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 import org.springframework.util.Assert;
 
 /**
  * @author Glenn Renfro
  */
-public class StepExecutionResource extends ResourceSupport {
+public class StepExecutionResource extends RepresentationModel<StepExecutionResource> {
 
 	private final Long jobExecutionId;
 
@@ -76,7 +76,7 @@ public class StepExecutionResource extends ResourceSupport {
 		return this.stepType;
 	}
 
-	public static class Page extends PagedResources<StepExecutionResource> {
+	public static class Page extends PagedModel<StepExecutionResource> {
 	}
 
 }

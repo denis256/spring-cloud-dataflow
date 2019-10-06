@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,16 +22,27 @@ import org.springframework.cloud.dataflow.core.DataFlowPropertyKeys;
  * Configuration properties used in {@link DataFlowClientAutoConfiguration}
  *
  * @author Vinicius Carvalho
+ * @author David Turanski
  */
 @ConfigurationProperties(prefix = DataFlowPropertyKeys.PREFIX + "client")
 public class DataFlowClientProperties {
 
+	/**
+	 * The Data Flow server URI.
+	 */
 	private String serverUri = "http://localhost:9393";
 
 	private Authentication authentication = new Authentication();
 
+	/**
+	 * Skip Ssl validation.
+	 */
 	private boolean skipSslValidation = true;
 
+
+	/**
+	 * Enable Data Flow DSL access.
+	 */
 	private boolean enableDsl = false;
 
 	public boolean isEnableDsl() {
@@ -70,6 +81,19 @@ public class DataFlowClientProperties {
 
 		private Basic basic = new Basic();
 
+		/**
+		 * OAuth2 Access Token.
+		 */
+		private String accessToken;
+
+		public String getAccessToken() {
+			return accessToken;
+		}
+
+		public void setAccessToken(String accessToken) {
+			this.accessToken = accessToken;
+		}
+
 		public Basic getBasic() {
 			return basic;
 		}
@@ -80,8 +104,14 @@ public class DataFlowClientProperties {
 
 		public static class Basic {
 
+			/**
+			 * The login username.
+			 */
 			private String username;
 
+			/**
+			 * The login password.
+			 */
 			private String password;
 
 			public String getUsername() {

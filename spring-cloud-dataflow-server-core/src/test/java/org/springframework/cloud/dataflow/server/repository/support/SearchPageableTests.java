@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -49,7 +49,7 @@ public class SearchPageableTests {
 
 	@Test
 	public void initializeSearchPageableWithNullSearchQuery() throws Exception {
-		final PageRequest pageable = new PageRequest(1, 5);
+		final PageRequest pageable = PageRequest.of(1, 5);
 		try {
 			new SearchPageable(pageable, null);
 		}
@@ -63,7 +63,7 @@ public class SearchPageableTests {
 
 	@Test
 	public void initializeSearchPageableWithEmptySearchQuery() throws Exception {
-		final PageRequest pageable = new PageRequest(1, 5);
+		final PageRequest pageable = PageRequest.of(1, 5);
 		try {
 			new SearchPageable(pageable, "  ");
 		}
@@ -76,9 +76,9 @@ public class SearchPageableTests {
 	}
 
 	@Test
-	public void addNullCollumn() throws Exception {
-		final PageRequest pageable = new PageRequest(1, 5);
-		final SearchPageable searchPageable = new SearchPageable(pageable, "search query");
+	public void addNullColumn() throws Exception {
+		final PageRequest pageable = PageRequest.of(1, 5);
+		final SearchPageable searchPageable = new SearchPageable(pageable, "findByTaskNameContains query");
 
 		try {
 			searchPageable.addColumns(new String[] {});
@@ -92,9 +92,9 @@ public class SearchPageableTests {
 	}
 
 	@Test
-	public void addNullCollumn2() throws Exception {
-		final PageRequest pageable = new PageRequest(1, 5);
-		final SearchPageable searchPageable = new SearchPageable(pageable, "search query");
+	public void addNullColumn2() throws Exception {
+		final PageRequest pageable = PageRequest.of(1, 5);
+		final SearchPageable searchPageable = new SearchPageable(pageable, "findByTaskNameContains query");
 
 		try {
 			searchPageable.addColumns("c1", null);
@@ -108,9 +108,9 @@ public class SearchPageableTests {
 	}
 
 	@Test
-	public void addWhitespaceCollumn() throws Exception {
-		final PageRequest pageable = new PageRequest(1, 5);
-		final SearchPageable searchPageable = new SearchPageable(pageable, "search query");
+	public void addWhitespaceColumn() throws Exception {
+		final PageRequest pageable = PageRequest.of(1, 5);
+		final SearchPageable searchPageable = new SearchPageable(pageable, "findByTaskNameContains query");
 
 		try {
 			searchPageable.addColumns("     ");
@@ -125,12 +125,12 @@ public class SearchPageableTests {
 
 	@Test
 	public void testSearchPageableGetters() throws Exception {
-		final PageRequest pageable = new PageRequest(1, 5);
-		final SearchPageable searchPageable = new SearchPageable(pageable, "search query");
+		final PageRequest pageable = PageRequest.of(1, 5);
+		final SearchPageable searchPageable = new SearchPageable(pageable, "findByTaskNameContains query");
 
 		assertThat(searchPageable.getColumns(), is(empty()));
 		assertNotNull(searchPageable.getPageable());
-		assertEquals(searchPageable.getSearchQuery(), "search query");
+		assertEquals(searchPageable.getSearchQuery(), "findByTaskNameContains query");
 
 		searchPageable.addColumns("c1", "c2");
 

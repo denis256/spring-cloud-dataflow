@@ -1,7 +1,7 @@
 <?xml version="1.0"?>
 <!DOCTYPE module PUBLIC
         "-//Puppy Crawl//DTD Check Configuration 1.3//EN"
-        "http://www.puppycrawl.com/dtds/configuration_1_3.dtd">
+        "https://www.puppycrawl.com/dtds/configuration_1_3.dtd">
 <module name="Checker">
     <!-- Root Checks -->
     <module name="RegexpHeader">
@@ -90,13 +90,14 @@
         <module name="AvoidStarImport"/>
         <module name="AvoidStaticImport">
         <property name="excludes"
-        value="org.junit.Assert.*,org.mockito.Mockito.*,org.mockito.Matchers.*,org.hamcrest.Matchers.*,
+        value="org.junit.Assert.*,org.mockito.Mockito.*,org.mockito.Matchers.*,org.mockito.ArgumentMatchers.*,
+        org.hamcrest.Matchers.*,
         org.assertj.core.api.Assertions.*,org.hamcrest.CoreMatchers.*,org.hamcrest.core.Is.*,
         org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*,
         org.springframework.test.web.servlet.result.MockMvcResultMatchers.*,
         org.springframework.test.web.servlet.result.MockMvcResultHandlers.*,
         junit.framework.TestCase.*,
-        org.springframework.cloud.dataflow.server.local.security.SecurityTestUtils.*,
+        org.springframework.cloud.dataflow.server.single.security.SecurityTestUtils.*,
         org.springframework.restdocs.mockmvc.MockMvcRestDocumentation.*,
         org.springframework.restdocs.operation.preprocess.Preprocessors.*,
         org.springframework.restdocs.mockmvc.RestDocumentationRequestBuilders.*,
@@ -125,12 +126,12 @@
         <!--<property name="max" value="1"/>-->
         <!--<property name="tokens" value="LAMBDA"/>-->
         <!--</module>-->
-        <!--
+
         <module name="ReturnCount">
             <property name="max" value="3"/>
             <property name="tokens" value="METHOD_DEF"/>
         </module>
-        -->
+        
         <module name="UnusedImports"/>
 
         <!-- Miscellaneous -->

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,6 +20,8 @@ import java.net.URI;
 import java.util.HashMap;
 import java.util.Map;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import org.springframework.batch.core.ExitStatus;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.JobInstance;
@@ -28,7 +30,6 @@ import org.springframework.batch.core.JobParameters;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.item.ExecutionContext;
 import org.springframework.cloud.dataflow.rest.Version;
-import org.springframework.cloud.dataflow.rest.client.support.ExecutionContextJacksonMixIn;
 import org.springframework.cloud.dataflow.rest.client.support.ExitStatusJacksonMixIn;
 import org.springframework.cloud.dataflow.rest.client.support.JobExecutionJacksonMixIn;
 import org.springframework.cloud.dataflow.rest.client.support.JobInstanceJacksonMixIn;
@@ -38,10 +39,12 @@ import org.springframework.cloud.dataflow.rest.client.support.StepExecutionHisto
 import org.springframework.cloud.dataflow.rest.client.support.StepExecutionJacksonMixIn;
 import org.springframework.cloud.dataflow.rest.job.StepExecutionHistory;
 import org.springframework.cloud.dataflow.rest.resource.RootResource;
+import org.springframework.cloud.dataflow.rest.resource.about.AboutResource;
+import org.springframework.cloud.dataflow.rest.support.jackson.ExecutionContextJacksonMixIn;
 import org.springframework.hateoas.Link;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.RepresentationModel;
 import org.springframework.hateoas.UriTemplate;
-import org.springframework.hateoas.hal.Jackson2HalModule;
+import org.springframework.hateoas.mediatype.hal.Jackson2HalModule;
 import org.springframework.http.converter.HttpMessageConverter;
 import org.springframework.http.converter.json.MappingJackson2HttpMessageConverter;
 import org.springframework.util.Assert;
@@ -77,21 +80,6 @@ public class DataFlowTemplate implements DataFlowOperations {
 	private final StreamOperations streamOperations;
 
 	/**
-	 * REST client for counter operations.
-	 */
-	private final CounterOperations counterOperations;
-
-	/**
-	 * REST client for field value counter operations.
-	 */
-	private final FieldValueCounterOperations fieldValueCounterOperations;
-
-	/**
-	 * REST client for aggregate counter operations.
-	 */
-	private final AggregateCounterOperations aggregateCounterOperations;
-
-	/**
 	 * REST client for task operations.
 	 */
 	private final TaskOperations taskOperations;
@@ -121,22 +109,26 @@ public class DataFlowTemplate implements DataFlowOperations {
 	 */
 	private final AboutOperations aboutOperations;
 
+
+	/**
+	 * REST Client for "scheduler" operations.
+	 */
+	private final SchedulerOperations schedulerOperations;
+
+
 	/**
 	 * Setup a {@link DataFlowTemplate} using the provided baseURI. Will build a
 	 * {@link RestTemplate} implicitly with the required set of Jackson MixIns. For more
 	 * information, please see {@link #prepareRestTemplate(RestTemplate)}.
-	 * <p>
 	 * Please be aware that the created RestTemplate will use the JDK's default timeout
 	 * values. Consider passing in a custom {@link RestTemplate} or, depending on your JDK
 	 * implementation, set System properties such as:
-	 * <p>
 	 * <ul>
 	 * <li>sun.net.client.defaultConnectTimeout
 	 * <li>sun.net.client.defaultReadTimeout
 	 * </ul>
-	 * <p>
 	 * For more information see <a href=
-	 * "http://docs.oracle.com/javase/7/docs/technotes/guides/net/properties.html">this
+	 * "https://docs.oracle.com/javase/7/docs/technotes/guides/net/properties.html">this
 	 * link</a>
 	 *
 	 * @param baseURI Must not be null
@@ -167,7 +159,7 @@ public class DataFlowTemplate implements DataFlowOperations {
 				throw new IllegalStateException("Incompatible version of Data Flow server detected.\n"
 						+ "Follow instructions in the documentation for the version of the server you are "
 						+ "using to download a compatible version of the shell.\n"
-						+ "Documentation can be accessed at http://cloud.spring.io/spring-cloud-dataflow/");
+						+ "Documentation can be accessed at https://cloud.spring.io/spring-cloud-dataflow/");
 			}
 			String serverRevision = resourceSupport.getApiRevision().toString();
 			if (!String.valueOf(Version.REVISION).equals(serverRevision)) {
@@ -180,56 +172,59 @@ public class DataFlowTemplate implements DataFlowOperations {
 						Version.REVISION, serverRevision, downloadURL));
 			}
 
-			this.aboutOperations = new AboutTemplate(restTemplate, resourceSupport.getLink(AboutTemplate.ABOUT_REL));
+			this.aboutOperations = new AboutTemplate(restTemplate, resourceSupport.getLink(AboutTemplate.ABOUT_REL).get());
 
 			if (resourceSupport.hasLink(StreamTemplate.DEFINITIONS_REL)) {
-				this.streamOperations = new StreamTemplate(restTemplate, resourceSupport);
+				this.streamOperations = new StreamTemplate(restTemplate, resourceSupport, getVersion());
 				this.runtimeOperations = new RuntimeTemplate(restTemplate, resourceSupport);
 			}
 			else {
 				this.streamOperations = null;
 				this.runtimeOperations = null;
 			}
-			if (resourceSupport.hasLink(CounterTemplate.COUNTER_RELATION)) {
-				this.counterOperations = new CounterTemplate(restTemplate, resourceSupport);
-				this.fieldValueCounterOperations = new FieldValueCounterTemplate(restTemplate, resourceSupport);
-				this.aggregateCounterOperations = new AggregateCounterTemplate(restTemplate, resourceSupport);
-			}
-			else {
-				this.counterOperations = null;
-				this.fieldValueCounterOperations = null;
-				this.aggregateCounterOperations = null;
-			}
 			if (resourceSupport.hasLink(TaskTemplate.DEFINITIONS_RELATION)) {
-				this.taskOperations = new TaskTemplate(restTemplate, resourceSupport);
+				this.taskOperations = new TaskTemplate(restTemplate, resourceSupport, getVersion());
 				this.jobOperations = new JobTemplate(restTemplate, resourceSupport);
+				if(resourceSupport.hasLink(SchedulerTemplate.SCHEDULES_RELATION)) {
+					this.schedulerOperations = new SchedulerTemplate(restTemplate, resourceSupport);
+				}
+				else {
+					schedulerOperations = null;
+				}
 			}
 			else {
 				this.taskOperations = null;
 				this.jobOperations = null;
+				this.schedulerOperations = null;
 			}
 			this.appRegistryOperations = new AppRegistryTemplate(restTemplate, resourceSupport);
 			this.completionOperations = new CompletionTemplate(restTemplate,
-					resourceSupport.getLink("completions/stream"), resourceSupport.getLink("completions/task"));
+					resourceSupport.getLink("completions/stream").get(), resourceSupport.getLink("completions/task").get());
 		}
 		else {
 			this.aboutOperations = null;
 			this.streamOperations = null;
 			this.runtimeOperations = null;
-			this.counterOperations = null;
-			this.fieldValueCounterOperations = null;
-			this.aggregateCounterOperations = null;
 			this.taskOperations = null;
 			this.jobOperations = null;
 			this.appRegistryOperations = null;
 			this.completionOperations = null;
+			this.schedulerOperations = null;
 		}
+	}
+
+	private String getVersion() {
+		String version = "";
+		AboutResource aboutResource = this.aboutOperations.get();
+		if(aboutResource != null) {
+			version = aboutResource.getVersionInfo().getCore().getVersion();
+		}
+		return version;
 	}
 
 	/**
 	 * Will augment the provided {@link RestTemplate} with the Jackson Mixins required by
 	 * Spring Cloud Data Flow, specifically:
-	 * <p>
 	 * <ul>
 	 * <li>{@link JobExecutionJacksonMixIn}
 	 * <li>{@link JobParametersJacksonMixIn}
@@ -240,7 +235,7 @@ public class DataFlowTemplate implements DataFlowOperations {
 	 * <li>{@link ExecutionContextJacksonMixIn}
 	 * <li>{@link StepExecutionHistoryJacksonMixIn}
 	 * </ul>
-	 * <p>
+	 *
 	 * Furthermore, this method will also register the {@link Jackson2HalModule}
 	 *
 	 * @param restTemplate Can be null. Instantiates a new {@link RestTemplate} if null
@@ -259,15 +254,7 @@ public class DataFlowTemplate implements DataFlowOperations {
 			if (converter instanceof MappingJackson2HttpMessageConverter) {
 				containsMappingJackson2HttpMessageConverter = true;
 				final MappingJackson2HttpMessageConverter jacksonConverter = (MappingJackson2HttpMessageConverter) converter;
-				jacksonConverter.getObjectMapper().registerModule(new Jackson2HalModule())
-						.addMixIn(JobExecution.class, JobExecutionJacksonMixIn.class)
-						.addMixIn(JobParameters.class, JobParametersJacksonMixIn.class)
-						.addMixIn(JobParameter.class, JobParameterJacksonMixIn.class)
-						.addMixIn(JobInstance.class, JobInstanceJacksonMixIn.class)
-						.addMixIn(ExitStatus.class, ExitStatusJacksonMixIn.class)
-						.addMixIn(StepExecution.class, StepExecutionJacksonMixIn.class)
-						.addMixIn(ExecutionContext.class, ExecutionContextJacksonMixIn.class)
-						.addMixIn(StepExecutionHistory.class, StepExecutionHistoryJacksonMixIn.class);
+				DataFlowTemplate.prepareObjectMapper(jacksonConverter.getObjectMapper());
 			}
 		}
 
@@ -279,6 +266,27 @@ public class DataFlowTemplate implements DataFlowOperations {
 	}
 
 	/**
+	 * Mutable operation to add several required MixIns to the provided
+	 * {@link ObjectMapper}.
+	 *
+	 * @param objectMapper Must not be null
+	 * @return ObjectMapper with several mixIns applied
+	 */
+	public static ObjectMapper prepareObjectMapper(ObjectMapper objectMapper) {
+		Assert.notNull(objectMapper, "The objectMapper must not be null.");
+		return objectMapper
+			.registerModule(new Jackson2HalModule())
+			.addMixIn(JobExecution.class, JobExecutionJacksonMixIn.class)
+			.addMixIn(JobParameters.class, JobParametersJacksonMixIn.class)
+			.addMixIn(JobParameter.class, JobParameterJacksonMixIn.class)
+			.addMixIn(JobInstance.class, JobInstanceJacksonMixIn.class)
+			.addMixIn(ExitStatus.class, ExitStatusJacksonMixIn.class)
+			.addMixIn(StepExecution.class, StepExecutionJacksonMixIn.class)
+			.addMixIn(ExecutionContext.class, ExecutionContextJacksonMixIn.class)
+			.addMixIn(StepExecutionHistory.class, StepExecutionHistoryJacksonMixIn.class);
+	}
+
+	/**
 	 * Invokes {@link #prepareRestTemplate(RestTemplate)}.
 	 *
 	 * @return RestTemplate with the required Jackson MixIns applied
@@ -287,8 +295,8 @@ public class DataFlowTemplate implements DataFlowOperations {
 		return prepareRestTemplate(null);
 	}
 
-	public Link getLink(ResourceSupport resourceSupport, String rel) {
-		Link link = resourceSupport.getLink(rel);
+	public Link getLink(RepresentationModel<?> resourceSupport, String rel) {
+		Link link = resourceSupport.getLink(rel).get();
 		if (link == null) {
 			throw new DataFlowServerException(
 					"Server did not return a link for '" + rel + "', links: '" + resourceSupport + "'");
@@ -299,21 +307,6 @@ public class DataFlowTemplate implements DataFlowOperations {
 	@Override
 	public StreamOperations streamOperations() {
 		return streamOperations;
-	}
-
-	@Override
-	public CounterOperations counterOperations() {
-		return counterOperations;
-	}
-
-	@Override
-	public FieldValueCounterOperations fieldValueCounterOperations() {
-		return fieldValueCounterOperations;
-	}
-
-	@Override
-	public AggregateCounterOperations aggregateCounterOperations() {
-		return aggregateCounterOperations;
 	}
 
 	@Override
@@ -344,6 +337,11 @@ public class DataFlowTemplate implements DataFlowOperations {
 	@Override
 	public AboutOperations aboutOperation() {
 		return aboutOperations;
+	}
+
+	@Override
+	public SchedulerOperations schedulerOperations() {
+		return schedulerOperations;
 	}
 
 	/**

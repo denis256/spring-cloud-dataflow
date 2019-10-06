@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -27,6 +27,7 @@ import org.springframework.batch.core.launch.NoSuchJobExecutionException;
 import org.springframework.batch.core.launch.NoSuchJobInstanceException;
 import org.springframework.cloud.dataflow.rest.job.JobInstanceExecutions;
 import org.springframework.cloud.dataflow.rest.job.TaskJobExecution;
+import org.springframework.cloud.dataflow.server.batch.JobExecutionWithStepCount;
 import org.springframework.cloud.dataflow.server.job.support.JobNotRestartableException;
 import org.springframework.cloud.task.repository.TaskExecution;
 import org.springframework.data.domain.Pageable;
@@ -56,11 +57,22 @@ public interface TaskJobService {
 	 * jobName and matches the data with a task id.
 	 *
 	 * @param pageable enumerates the data to be returned.
-	 * @param jobName the name of the job for which to search.
+	 * @param jobName the name of the job for which to findByTaskNameContains.
 	 * @return List containing {@link TaskJobExecution}s.
 	 * @throws NoSuchJobException if the job with the given name does not exist.
 	 */
 	List<TaskJobExecution> listJobExecutionsForJob(Pageable pageable, String jobName) throws NoSuchJobException;
+
+	/**
+	 * Retrieves Pageable list of {@link JobExecutionWithStepCount} from the JobRepository with a specific
+	 * jobName and matches the data with a task id.
+	 *
+	 * @param pageable enumerates the data to be returned.
+	 * @param jobName the name of the job for which to findByTaskNameContains.
+	 * @return List containing {@link JobExecutionWithStepCount}s.
+	 * @throws NoSuchJobException if the job with the given name does not exist.
+	 */
+	public List<TaskJobExecution> listJobExecutionsForJobWithStepCount(Pageable pageable, String jobName) throws NoSuchJobException;
 
 	/**
 	 * Retrieves a JobExecution from the JobRepository and matches it with a task id.
@@ -77,7 +89,7 @@ public interface TaskJobService {
 	 * specific jobName and matches the data with the associated JobExecutions.
 	 *
 	 * @param pageable enumerates the data to be returned.
-	 * @param jobName the name of the job for which to search.
+	 * @param jobName the name of the job for which to findByTaskNameContains.
 	 * @return List containing {@link JobInstanceExecutions}.
 	 * @throws NoSuchJobException if the job for the jobName specified does not exist.
 	 */
@@ -114,7 +126,7 @@ public interface TaskJobService {
 	/**
 	 * Retrieves the total number {@link JobExecution} that match a specific job name.
 	 *
-	 * @param jobName the job name to search.
+	 * @param jobName the job name to findByTaskNameContains.
 	 * @return the number of {@link JobExecution}s that match the job name.
 	 * @throws NoSuchJobException if the job for the jobName does not exist.
 	 */
@@ -139,10 +151,21 @@ public interface TaskJobService {
 	 * Furthermore, this method does not interfere with the associated {@link TaskExecution}.
 	 *
 	 * @param jobExecutionId The id of the {@link JobExecution} to stop
-	 * @throws NoSuchJobExecutionException if no job execution exists for the jobExecutionId.
-	 * @throws JobExecutionNotRunningException if a stop is requested on a job that is not
+	 * @throws NoSuchJobExecutionException thrown if no job execution exists for the jobExecutionId.
+	 * @throws JobExecutionNotRunningException thrown if a stop is requested on a job that is not
 	 * running.
-	 * @see org.springframework.batch.admin.service.JobService#stop(Long)
+	 * @see org.springframework.cloud.dataflow.server.batch.JobService#stop(Long)
 	 */
 	void stopJobExecution(long jobExecutionId) throws NoSuchJobExecutionException, JobExecutionNotRunningException;
+
+	/**
+	 * Retrieves Pageable list of {@link JobExecutionWithStepCount}s from the JobRepository and matches the
+	 * data with a task id but excludes the step executions.
+	 *
+	 * @param pageable enumerates the data to be returned.
+	 * @return List containing {@link TaskJobExecution}s.
+	 *
+	 * @throws NoSuchJobExecutionException thrown if the job execution specified does not exist.
+	 */
+	public List<TaskJobExecution> listJobExecutionsWithStepCount(Pageable pageable) throws NoSuchJobExecutionException;
 }

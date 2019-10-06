@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2018 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,47 +15,64 @@
  */
 package org.springframework.cloud.dataflow.server.config.features;
 
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+
 import javax.sql.DataSource;
 
-import org.springframework.batch.admin.service.JobService;
-import org.springframework.batch.admin.service.SimpleJobServiceFactoryBean;
 import org.springframework.batch.core.configuration.support.MapJobRegistry;
+import org.springframework.batch.core.explore.JobExplorer;
 import org.springframework.batch.core.explore.support.JobExplorerFactoryBean;
 import org.springframework.batch.core.launch.support.SimpleJobLauncher;
 import org.springframework.batch.core.repository.support.JobRepositoryFactoryBean;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.batch.BatchDatabaseInitializer;
-import org.springframework.boot.autoconfigure.batch.BatchProperties;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.cloud.dataflow.audit.service.AuditRecordService;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
+import org.springframework.cloud.dataflow.core.TaskPlatform;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
+import org.springframework.cloud.dataflow.server.DockerValidatorProperties;
+import org.springframework.cloud.dataflow.server.batch.JobService;
+import org.springframework.cloud.dataflow.server.batch.SimpleJobServiceFactoryBean;
 import org.springframework.cloud.dataflow.server.config.apps.CommonApplicationProperties;
-import org.springframework.cloud.dataflow.server.job.TaskExplorerFactoryBean;
-import org.springframework.cloud.dataflow.server.repository.DeploymentIdRepository;
-import org.springframework.cloud.dataflow.server.repository.RdbmsTaskDefinitionRepository;
+import org.springframework.cloud.dataflow.server.job.LauncherRepository;
+import org.springframework.cloud.dataflow.server.repository.DataflowJobExecutionDao;
+import org.springframework.cloud.dataflow.server.repository.DataflowTaskExecutionDao;
+import org.springframework.cloud.dataflow.server.repository.DataflowTaskExecutionMetadataDao;
 import org.springframework.cloud.dataflow.server.repository.TaskDefinitionRepository;
+import org.springframework.cloud.dataflow.server.repository.TaskDeploymentRepository;
+import org.springframework.cloud.dataflow.server.service.DeployerConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.server.service.LauncherInitializationService;
+import org.springframework.cloud.dataflow.server.service.SchedulerService;
+import org.springframework.cloud.dataflow.server.service.TaskDeleteService;
+import org.springframework.cloud.dataflow.server.service.TaskExecutionCreationService;
+import org.springframework.cloud.dataflow.server.service.TaskExecutionInfoService;
+import org.springframework.cloud.dataflow.server.service.TaskExecutionService;
 import org.springframework.cloud.dataflow.server.service.TaskJobService;
-import org.springframework.cloud.dataflow.server.service.TaskService;
+import org.springframework.cloud.dataflow.server.service.TaskSaveService;
+import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskDeleteService;
+import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskExecutionInfoService;
+import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskExecutionRepositoryService;
+import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskExecutionService;
 import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskJobService;
-import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskService;
+import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskSaveService;
+import org.springframework.cloud.dataflow.server.service.impl.TaskAppDeploymentRequestCreator;
 import org.springframework.cloud.dataflow.server.service.impl.TaskConfigurationProperties;
-import org.springframework.cloud.deployer.resource.support.DelegatingResourceLoader;
-import org.springframework.cloud.deployer.spi.task.TaskLauncher;
+import org.springframework.cloud.deployer.spi.scheduler.ScheduleInfo;
+import org.springframework.cloud.deployer.spi.scheduler.Scheduler;
 import org.springframework.cloud.task.repository.TaskExplorer;
 import org.springframework.cloud.task.repository.TaskRepository;
-import org.springframework.cloud.task.repository.support.SimpleTaskRepository;
-import org.springframework.cloud.task.repository.support.TaskExecutionDaoFactoryBean;
-import org.springframework.cloud.task.repository.support.TaskRepositoryInitializer;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ResourceLoader;
-import org.springframework.jdbc.datasource.DataSourceTransactionManager;
+import org.springframework.context.annotation.Profile;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.map.repository.config.EnableMapRepositories;
+import org.springframework.lang.Nullable;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.EnableTransactionManagement;
 
 /**
@@ -64,10 +81,16 @@ import org.springframework.transaction.annotation.EnableTransactionManagement;
  * @author Glenn Renfro
  * @author Michael Minella
  * @author Ilayaperumal Gopinathan
+ * @author Gunnar Hillert
+ * @author Christian Tzolov
+ * @author David Turanski
  */
 @Configuration
-@ConditionalOnProperty(prefix = FeaturesProperties.FEATURES_PREFIX, name = FeaturesProperties.TASKS_ENABLED, matchIfMissing = true)
-@EnableConfigurationProperties({ TaskConfigurationProperties.class, CommonApplicationProperties.class })
+@ConditionalOnTasksEnabled
+@EnableConfigurationProperties({ TaskConfigurationProperties.class, CommonApplicationProperties.class,
+		DockerValidatorProperties.class, LocalPlatformProperties.class
+})
+@EnableMapRepositories(basePackages = "org.springframework.cloud.dataflow.server.job")
 @EnableTransactionManagement
 public class TaskConfiguration {
 
@@ -78,43 +101,165 @@ public class TaskConfiguration {
 	private String dataflowServerUri;
 
 	@Bean
-	public TaskExplorerFactoryBean taskExplorerFactoryBean(DataSource dataSource) {
-		return new TaskExplorerFactoryBean(dataSource);
+	public DeployerConfigurationMetadataResolver deployerConfigurationMetadataResolver(
+			TaskConfigurationProperties taskConfigurationProperties) {
+		return new DeployerConfigurationMetadataResolver(taskConfigurationProperties.getDeployerProperties());
 	}
 
 	@Bean
-	public TaskRepository taskRepository(DataSource dataSource) {
-		return new SimpleTaskRepository(new TaskExecutionDaoFactoryBean(dataSource));
+	public LauncherInitializationService launcherInitializationService(
+			LauncherRepository launcherRepository,
+			List<TaskPlatform> platforms,
+			DeployerConfigurationMetadataResolver resolver) {
+		return new LauncherInitializationService(launcherRepository, platforms, resolver);
+	}
+
+	/**
+	 * The default profile is active when no other profiles are active. This is configured so
+	 * that several tests will pass without having to explicitly enable the local profile.
+	 * @param localPlatformProperties
+	 * @return
+	 */
+	@Profile({ "local", "default" })
+	@Bean
+	public TaskPlatform localTaskPlatform(LocalPlatformProperties localPlatformProperties,
+			@Nullable Scheduler localScheduler) {
+		TaskPlatform taskPlatform = new LocalTaskPlatformFactory(localPlatformProperties, localScheduler)
+				.createTaskPlatform();
+		taskPlatform.setPrimary(true);
+		return taskPlatform;
+	}
+
+	/**
+	 * The default profile is active when no other profiles are active. This is configured so
+	 * that several tests will pass without having to explicitly enable the local profile.
+	 * @return a no-op {@link SchedulerService}
+	 */
+	@Profile({ "local", "default" })
+	@Bean
+	public SchedulerService schedulerService() {
+		return new SchedulerService() {
+			@Override
+			public void schedule(String scheduleName, String taskDefinitionName, Map<String, String> taskProperties, List<String> commandLineArgs) {
+			}
+
+			@Override
+			public void unschedule(String scheduleName) {
+			}
+
+			@Override
+			public void unscheduleForTaskDefinition(String taskDefinitionName) {
+			}
+
+			@Override
+			public List<ScheduleInfo> list(Pageable pageable, String taskDefinitionName) {
+				return null;
+			}
+
+			@Override
+			public Page<ScheduleInfo> list(Pageable pageable) {
+				return null;
+			}
+
+			@Override
+			public List<ScheduleInfo> list(String taskDefinitionName) {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public List<ScheduleInfo> list() {
+				return Collections.emptyList();
+			}
+
+			@Override
+			public ScheduleInfo getSchedule(String scheduleName) {
+				return null;
+			}
+		};
+	}
+
+
+	@Bean
+	public TaskExecutionInfoService taskDefinitionRetriever(AppRegistryService registry,
+			TaskExplorer taskExplorer, TaskDefinitionRepository taskDefinitionRepository,
+			TaskConfigurationProperties taskConfigurationProperties,
+			LauncherRepository launcherRepository, List<TaskPlatform> taskPlatforms) {
+		return new DefaultTaskExecutionInfoService(dataSourceProperties, registry,
+				taskExplorer, taskDefinitionRepository, taskConfigurationProperties, launcherRepository, taskPlatforms);
 	}
 
 	@Bean
-	@ConditionalOnBean(TaskDefinitionRepository.class)
-	public TaskService taskService(TaskDefinitionRepository repository, TaskExplorer taskExplorer,
-			TaskRepository taskExecutionRepository, AppRegistryCommon registry, DelegatingResourceLoader resourceLoader,
-			TaskLauncher taskLauncher, ApplicationConfigurationMetadataResolver metadataResolver,
-			TaskConfigurationProperties taskConfigurationProperties, DeploymentIdRepository deploymentIdRepository,
-			CommonApplicationProperties commonApplicationProperties) {
-		return new DefaultTaskService(dataSourceProperties, repository, taskExplorer, taskExecutionRepository, registry,
-				resourceLoader, taskLauncher, metadataResolver, taskConfigurationProperties, deploymentIdRepository,
-				this.dataflowServerUri, commonApplicationProperties);
+	public TaskDeleteService deleteTaskService(TaskExplorer taskExplorer, LauncherRepository launcherRepository,
+			TaskDefinitionRepository taskDefinitionRepository, TaskDeploymentRepository taskDeploymentRepository,
+			AuditRecordService auditRecordService,
+			DataflowTaskExecutionDao dataflowTaskExecutionDao,
+			DataflowJobExecutionDao dataflowJobExecutionDao,
+			DataflowTaskExecutionMetadataDao dataflowTaskExecutionMetadataDao,
+			SchedulerService schedulerService) {
+		return new DefaultTaskDeleteService(taskExplorer, launcherRepository, taskDefinitionRepository,
+				taskDeploymentRepository,
+				auditRecordService,
+				dataflowTaskExecutionDao,
+				dataflowJobExecutionDao,
+				dataflowTaskExecutionMetadataDao,
+				schedulerService);
 	}
 
 	@Bean
-	@ConditionalOnBean(TaskDefinitionRepository.class)
+	public TaskSaveService saveTaskService(TaskDefinitionRepository taskDefinitionRepository,
+			AuditRecordService auditRecordService, AppRegistryService registry) {
+		return new DefaultTaskSaveService(taskDefinitionRepository, auditRecordService, registry);
+	}
+
+	@Bean
+	public TaskExecutionCreationService taskExecutionRepositoryService(TaskRepository taskRepository) {
+		return new DefaultTaskExecutionRepositoryService(taskRepository);
+	}
+
+	@Bean
+	public TaskAppDeploymentRequestCreator taskAppDeploymentRequestCreator(
+			CommonApplicationProperties commonApplicationProperties,
+			ApplicationConfigurationMetadataResolver metadataResolver) {
+		return new TaskAppDeploymentRequestCreator(commonApplicationProperties,
+				metadataResolver, dataflowServerUri);
+	}
+
+	@Bean
+	public TaskExecutionService taskService(LauncherRepository launcherRepository,
+			AuditRecordService auditRecordService,
+			TaskRepository taskRepository,
+			TaskExecutionInfoService taskExecutionInfoService,
+			TaskDeploymentRepository taskDeploymentRepository,
+			TaskExecutionCreationService taskExecutionRepositoryService,
+			TaskAppDeploymentRequestCreator taskAppDeploymentRequestCreator,
+			TaskExplorer taskExplorer,
+			DataflowTaskExecutionDao dataflowTaskExecutionDao,
+			DataflowTaskExecutionMetadataDao dataflowTaskExecutionMetadataDao) {
+		return new DefaultTaskExecutionService(
+				launcherRepository, auditRecordService, taskRepository,
+				taskExecutionInfoService, taskDeploymentRepository, taskExecutionRepositoryService,
+				taskAppDeploymentRequestCreator, taskExplorer, dataflowTaskExecutionDao,
+				dataflowTaskExecutionMetadataDao);
+	}
+
+	@Bean
 	public TaskJobService taskJobExecutionRepository(JobService service, TaskExplorer taskExplorer,
-			TaskDefinitionRepository taskDefinitionRepository, TaskService taskService) {
-		return new DefaultTaskJobService(service, taskExplorer, taskDefinitionRepository, taskService);
+			TaskDefinitionRepository taskDefinitionRepository, TaskExecutionService taskExecutionService) {
+		return new DefaultTaskJobService(service, taskExplorer, taskDefinitionRepository, taskExecutionService);
 	}
 
 	@Bean
 	public SimpleJobServiceFactoryBean simpleJobServiceFactoryBean(DataSource dataSource,
-			JobRepositoryFactoryBean repositoryFactoryBean) throws Exception {
+			JobRepositoryFactoryBean repositoryFactoryBean, JobExplorer jobExplorer,
+			PlatformTransactionManager dataSourceTransactionManager) throws Exception {
 		SimpleJobServiceFactoryBean factoryBean = new SimpleJobServiceFactoryBean();
 		factoryBean.setDataSource(dataSource);
 		factoryBean.setJobRepository(repositoryFactoryBean.getObject());
 		factoryBean.setJobLocator(new MapJobRegistry());
 		factoryBean.setJobLauncher(new SimpleJobLauncher());
 		factoryBean.setDataSource(dataSource);
+		factoryBean.setJobExplorer(jobExplorer);
+		factoryBean.setTransactionManager(dataSourceTransactionManager);
 		return factoryBean;
 	}
 
@@ -125,73 +270,12 @@ public class TaskConfiguration {
 		return jobExplorerFactoryBean;
 	}
 
-	@Configuration
-	@ConditionalOnProperty(name = "spring.dataflow.embedded.database.enabled", havingValue = "true", matchIfMissing = true)
-	@ConditionalOnExpression("#{'${spring.datasource.url:}'.startsWith('jdbc:h2:tcp://localhost:')}")
-	public static class H2ServerConfiguration {
-
-		@Bean
-		public JobRepositoryFactoryBean jobRepositoryFactoryBeanForServer(DataSource dataSource,
-				DataSourceTransactionManager dataSourceTransactionManager) {
-			JobRepositoryFactoryBean repositoryFactoryBean = new JobRepositoryFactoryBean();
-			repositoryFactoryBean.setDataSource(dataSource);
-			repositoryFactoryBean.setTransactionManager(dataSourceTransactionManager);
-			return repositoryFactoryBean;
-		}
-
-		@Bean
-		public BatchDatabaseInitializer batchRepositoryInitializerForDefaultDBForServer(DataSource dataSource,
-				ResourceLoader resourceLoader, BatchProperties properties) {
-			return new BatchDatabaseInitializer(dataSource, resourceLoader, properties);
-		}
-
-		@Bean
-		public TaskRepositoryInitializer taskRepositoryInitializerForDefaultDB(DataSource dataSource) {
-			TaskRepositoryInitializer taskRepositoryInitializer = new TaskRepositoryInitializer();
-			taskRepositoryInitializer.setDataSource(dataSource);
-			return taskRepositoryInitializer;
-		}
-
-		@Bean
-		@ConditionalOnMissingBean
-		public TaskDefinitionRepository taskDefinitionRepository(DataSource dataSource) {
-			return new RdbmsTaskDefinitionRepository(dataSource);
-		}
+	@Bean
+	public JobRepositoryFactoryBean jobRepositoryFactoryBean(DataSource dataSource,
+			PlatformTransactionManager platformTransactionManager) {
+		JobRepositoryFactoryBean repositoryFactoryBean = new JobRepositoryFactoryBean();
+		repositoryFactoryBean.setDataSource(dataSource);
+		repositoryFactoryBean.setTransactionManager(platformTransactionManager);
+		return repositoryFactoryBean;
 	}
-
-	@Configuration
-	@ConditionalOnExpression("#{!'${spring.datasource.url:}'.startsWith('jdbc:h2:tcp://localhost:') || "
-			+ "('${spring.datasource.url:}'.startsWith('jdbc:h2:tcp://localhost:') &&"
-			+ "'${spring.dataflow.embedded.database.enabled}'.equals('false'))}")
-	public static class NoH2ServerConfiguration {
-
-		@Bean
-		public JobRepositoryFactoryBean jobRepositoryFactoryBean(DataSource dataSource,
-				DataSourceTransactionManager dataSourceTransactionManager) {
-			JobRepositoryFactoryBean repositoryFactoryBean = new JobRepositoryFactoryBean();
-			repositoryFactoryBean.setDataSource(dataSource);
-			repositoryFactoryBean.setTransactionManager(dataSourceTransactionManager);
-			return repositoryFactoryBean;
-		}
-
-		@Bean
-		public BatchDatabaseInitializer batchRepositoryInitializerForDefaultDB(DataSource dataSource,
-				ResourceLoader resourceLoader, BatchProperties properties) {
-			return new BatchDatabaseInitializer(dataSource, resourceLoader, properties);
-		}
-
-		@Bean
-		public TaskRepositoryInitializer taskRepositoryInitializerForDB(DataSource dataSource) {
-			TaskRepositoryInitializer taskRepositoryInitializer = new TaskRepositoryInitializer();
-			taskRepositoryInitializer.setDataSource(dataSource);
-			return taskRepositoryInitializer;
-		}
-
-		@Bean
-		@ConditionalOnMissingBean
-		public TaskDefinitionRepository taskDefinitionRepository(DataSource dataSource) throws Exception {
-			return new RdbmsTaskDefinitionRepository(dataSource);
-		}
-	}
-
 }

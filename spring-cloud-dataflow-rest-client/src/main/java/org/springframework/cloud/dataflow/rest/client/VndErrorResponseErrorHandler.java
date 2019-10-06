@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,11 +19,12 @@ package org.springframework.cloud.dataflow.rest.client;
 import java.io.IOException;
 import java.util.List;
 
-import org.springframework.hateoas.VndErrors;
-import org.springframework.hateoas.VndErrors.VndError;
+import org.springframework.hateoas.mediatype.vnderrors.VndErrors;
+import org.springframework.hateoas.mediatype.vnderrors.VndErrors.VndError;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.client.ClientHttpResponse;
 import org.springframework.http.converter.HttpMessageConverter;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.DefaultResponseErrorHandler;
 import org.springframework.web.client.HttpMessageConverterExtractor;
 import org.springframework.web.client.ResponseExtractor;
@@ -60,6 +61,18 @@ public class VndErrorResponseErrorHandler extends DefaultResponseErrorHandler {
 		catch (Exception e) {
 			super.handleError(response);
 		}
-		throw new DataFlowClientException(vndErrors);
+		if (vndErrors != null) {
+			throw new DataFlowClientException(vndErrors);
+		}
+		else {
+			//see https://github.com/spring-cloud/spring-cloud-dataflow/issues/2898
+			final String message = StringUtils.hasText(response.getStatusText())
+					? response.getStatusText()
+					: String.valueOf(response.getStatusCode());
+
+			throw new DataFlowClientException(
+				new VndErrors(String.valueOf(response.getStatusCode()), message));
+		}
+
 	}
 }

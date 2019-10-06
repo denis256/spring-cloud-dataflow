@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -23,7 +23,7 @@ import org.springframework.util.Assert;
 
 /**
  * Simple class that is composed of a {@link Pageable} and several properties to
- * encapsulate search queries.
+ * encapsulate findByTaskNameContains queries.
  *
  * @author Gunnar Hillert
  */
@@ -37,7 +37,7 @@ public class SearchPageable {
 
 	/**
 	 * Initialize a {@link SearchPageable}. Must provide a {@link Pageable} and a
-	 * searchQuery. Don't forget to also provide the column names for the search using
+	 * searchQuery. Don't forget to also provide the column names for the findByTaskNameContains using
 	 * {@link #addColumns(String...)}.
 	 *
 	 * @param pageable Must not be null

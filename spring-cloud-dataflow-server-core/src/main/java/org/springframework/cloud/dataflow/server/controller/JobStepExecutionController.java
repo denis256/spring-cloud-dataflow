@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,21 +19,21 @@ package org.springframework.cloud.dataflow.server.controller;
 import java.util.ArrayList;
 import java.util.List;
 
-import org.springframework.batch.admin.service.JobService;
-import org.springframework.batch.admin.service.NoSuchStepExecutionException;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.StepExecution;
 import org.springframework.batch.core.launch.NoSuchJobExecutionException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.dataflow.rest.resource.StepExecutionResource;
+import org.springframework.cloud.dataflow.server.batch.JobService;
+import org.springframework.cloud.dataflow.server.batch.NoSuchStepExecutionException;
 import org.springframework.cloud.dataflow.server.job.support.StepExecutionResourceBuilder;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedResourcesAssembler;
-import org.springframework.hateoas.ExposesResourceFor;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.mvc.ResourceAssemblerSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.server.ExposesResourceFor;
+import org.springframework.hateoas.server.mvc.RepresentationModelAssemblerSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -79,12 +79,12 @@ public class JobStepExecutionController {
 	 */
 	@RequestMapping(value = { "" }, method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<StepExecutionResource> stepExecutions(@PathVariable("jobExecutionId") long id,
+	public PagedModel<StepExecutionResource> stepExecutions(@PathVariable("jobExecutionId") long id,
 			Pageable pageable, PagedResourcesAssembler<StepExecution> assembler) throws NoSuchJobExecutionException {
 		List<StepExecution> result;
 		result = new ArrayList<>(jobService.getStepExecutions(id));
 		Page<StepExecution> page = new PageImpl<>(result, pageable, result.size());
-		return assembler.toResource(page, stepAssembler);
+		return assembler.toModel(page, stepAssembler);
 	}
 
 	/**
@@ -102,27 +102,27 @@ public class JobStepExecutionController {
 	public StepExecutionResource getStepExecution(@PathVariable("jobExecutionId") Long id,
 			@PathVariable("stepExecutionId") Long stepId)
 			throws NoSuchStepExecutionException, NoSuchJobExecutionException {
-		return stepAssembler.toResource(jobService.getStepExecution(id, stepId));
+		return stepAssembler.toModel(jobService.getStepExecution(id, stepId));
 	}
 
 	/**
-	 * {@link org.springframework.hateoas.ResourceAssembler} implementation that converts
+	 * {@link org.springframework.hateoas.server.ResourceAssembler} implementation that converts
 	 * {@link StepExecution}s to {@link StepExecutionResource}s.
 	 */
-	private static class Assembler extends ResourceAssemblerSupport<StepExecution, StepExecutionResource> {
+	private static class Assembler extends RepresentationModelAssemblerSupport<StepExecution, StepExecutionResource> {
 
 		public Assembler() {
 			super(JobStepExecutionController.class, StepExecutionResource.class);
 		}
 
 		@Override
-		public StepExecutionResource toResource(StepExecution stepExecution) {
-			return createResourceWithId(stepExecution.getId(), stepExecution, stepExecution.getJobExecution().getId());
+		public StepExecutionResource toModel(StepExecution stepExecution) {
+			return createModelWithId(stepExecution.getId(), stepExecution, stepExecution.getJobExecution().getId());
 		}
 
 		@Override
-		public StepExecutionResource instantiateResource(StepExecution stepExecution) {
-			return StepExecutionResourceBuilder.toResource(stepExecution);
+		public StepExecutionResource instantiateModel(StepExecution stepExecution) {
+			return StepExecutionResourceBuilder.toModel(stepExecution);
 		}
 	}
 }

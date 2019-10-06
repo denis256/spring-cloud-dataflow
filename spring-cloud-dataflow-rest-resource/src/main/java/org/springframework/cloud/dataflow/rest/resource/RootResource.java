@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,7 @@ package org.springframework.cloud.dataflow.rest.resource;
 import com.fasterxml.jackson.annotation.JsonProperty;
 
 import org.springframework.cloud.dataflow.rest.Version;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.RepresentationModel;
 
 /**
  * Describes the other available resource endpoints, as well as provides information about
@@ -27,7 +27,7 @@ import org.springframework.hateoas.ResourceSupport;
  *
  * @author Eric Bottard
  */
-public class RootResource extends ResourceSupport {
+public class RootResource extends RepresentationModel<RootResource> {
 
 	private Integer apiRevision;
 

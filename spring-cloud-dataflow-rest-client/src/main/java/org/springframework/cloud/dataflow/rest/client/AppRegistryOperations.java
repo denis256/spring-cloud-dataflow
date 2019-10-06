@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2016 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +21,7 @@ import java.util.Properties;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.rest.resource.AppRegistrationResource;
 import org.springframework.cloud.dataflow.rest.resource.DetailedAppRegistrationResource;
-import org.springframework.hateoas.PagedResources;
+import org.springframework.hateoas.PagedModel;
 
 /**
  * Interface defining operations available for application registrations.
@@ -31,6 +31,7 @@ import org.springframework.hateoas.PagedResources;
  * @author Eric Bottard
  * @author Patrick Peralta
  * @author Mark Fisher
+ * @author Chris Schaefer
  */
 public interface AppRegistryOperations {
 
@@ -39,7 +40,7 @@ public interface AppRegistryOperations {
 	 *
 	 * @return list of all application registrations
 	 */
-	PagedResources<AppRegistrationResource> list();
+	PagedModel<AppRegistrationResource> list();
 
 	/**
 	 * Return a list of all application registrations for the given
@@ -48,16 +49,17 @@ public interface AppRegistryOperations {
 	 * @param type application type for which to return a list of registrations
 	 * @return list of all application registrations for the given application type
 	 */
-	PagedResources<AppRegistrationResource> list(ApplicationType type);
+	PagedModel<AppRegistrationResource> list(ApplicationType type);
 
 	/**
 	 * Retrieve information about an application registration.
 	 *
 	 * @param name name of application
 	 * @param type application type
+	 * @param exhaustive return all metadata, including common Spring Boot properties
 	 * @return detailed information about an application registration
 	 */
-	DetailedAppRegistrationResource info(String name, ApplicationType type);
+	DetailedAppRegistrationResource info(String name, ApplicationType type, boolean exhaustive);
 
 	/**
 	 * Retrieve information about an application registration.
@@ -65,9 +67,10 @@ public interface AppRegistryOperations {
 	 * @param name name of application
 	 * @param type application type
 	 * @param version application version
+	 * @param exhaustive return all metadata, including common Spring Boot properties
 	 * @return detailed information about an application registration
 	 */
-	DetailedAppRegistrationResource info(String name, ApplicationType type, String version);
+	DetailedAppRegistrationResource info(String name, ApplicationType type, String version, boolean exhaustive);
 
 	/**
 	 * Register an application name and type with its Maven coordinates.
@@ -113,6 +116,11 @@ public interface AppRegistryOperations {
 	void unregister(String name, ApplicationType type, String version);
 
 	/**
+	 * Unregister all applications.
+	 */
+	void unregisterAll();
+
+	/**
 	 * Set application version to default
 	 * @param name application name
 	 * @param type application type
@@ -127,7 +135,7 @@ public interface AppRegistryOperations {
 	 * @param force if {@code true}, overwrites any pre-existing registrations
 	 * @return the paged list of new app registrations
 	 */
-	PagedResources<AppRegistrationResource> importFromResource(String uri, boolean force);
+	PagedModel<AppRegistrationResource> importFromResource(String uri, boolean force);
 
 
 	/**
@@ -137,6 +145,6 @@ public interface AppRegistryOperations {
 	 * @param force if {@code true}, overwrites any pre-existing registrations
 	 * @return the paged list of new app registrations
 	 */
-	PagedResources<AppRegistrationResource> registerAll(Properties apps, boolean force);
+	PagedModel<AppRegistrationResource> registerAll(Properties apps, boolean force);
 
 }

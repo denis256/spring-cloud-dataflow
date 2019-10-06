@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,11 +21,11 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.TaskDefinition;
 import org.springframework.cloud.dataflow.core.dsl.CheckPointedParseException;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 
 /**
  * Provides completion proposals when the user has typed the two dashes that precede an
@@ -41,7 +41,7 @@ class ConfigurationPropertyNameAfterDashDashTaskRecoveryStrategy
 
 	private final ProposalsCollectorSupportUtils collectorSupport;
 
-	ConfigurationPropertyNameAfterDashDashTaskRecoveryStrategy(AppRegistryCommon appRegistry,
+	ConfigurationPropertyNameAfterDashDashTaskRecoveryStrategy(AppRegistryService appRegistry,
 			ApplicationConfigurationMetadataResolver metadataResolver) {
 		super(CheckPointedParseException.class, "file --");
 		this.collectorSupport = new ProposalsCollectorSupportUtils(appRegistry, metadataResolver);

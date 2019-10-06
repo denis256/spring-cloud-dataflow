@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2017 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,6 @@
 
 package org.springframework.cloud.dataflow.server.controller;
 
-import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
@@ -24,35 +23,41 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Properties;
+import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.ForkJoinPool;
-import java.util.stream.Collectors;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.springframework.boot.configurationmetadata.ConfigurationMetadataProperty;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
-import org.springframework.cloud.dataflow.registry.AppRegistry;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.core.StreamAppDefinition;
+import org.springframework.cloud.dataflow.core.StreamDefinition;
+import org.springframework.cloud.dataflow.core.StreamDeployment;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
+import org.springframework.cloud.dataflow.registry.service.DefaultAppRegistryService;
 import org.springframework.cloud.dataflow.registry.support.NoSuchAppRegistrationException;
+import org.springframework.cloud.dataflow.rest.SkipperStream;
 import org.springframework.cloud.dataflow.rest.resource.AppRegistrationResource;
 import org.springframework.cloud.dataflow.rest.resource.DetailedAppRegistrationResource;
-import org.springframework.context.ResourceLoaderAware;
+import org.springframework.cloud.dataflow.server.repository.StreamDefinitionRepository;
+import org.springframework.cloud.dataflow.server.service.StreamService;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.core.io.ResourceLoader;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedResourcesAssembler;
-import org.springframework.hateoas.ExposesResourceFor;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.mvc.ResourceAssemblerSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.server.ExposesResourceFor;
+import org.springframework.hateoas.server.mvc.RepresentationModelAssemblerSupport;
 import org.springframework.http.HttpStatus;
-import org.springframework.util.CollectionUtils;
 import org.springframework.util.StringUtils;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -62,7 +67,7 @@ import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * Handles all {@link AppRegistry} related interactions.
+ * Handles all {@link DefaultAppRegistryService} related interactions.
  *
  * @author Glenn Renfro
  * @author Mark Fisher
@@ -71,82 +76,63 @@ import org.springframework.web.bind.annotation.RestController;
  * @author Gary Russell
  * @author Patrick Peralta
  * @author Thomas Risberg
+ * @author Chris Schaefer
  */
 @RestController
 @RequestMapping("/apps")
 @ExposesResourceFor(AppRegistrationResource.class)
-public class AppRegistryController implements ResourceLoaderAware {
+public class AppRegistryController {
 
 	private static final Logger logger = LoggerFactory.getLogger(AppRegistryController.class);
 
 	private final Assembler assembler = new Assembler();
 
-	private final AppRegistry appRegistry;
+	private final StreamDefinitionRepository streamDefinitionRepository;
+
+	private final AppRegistryService appRegistryService;
+
+	private final StreamService streamService;
 
 	private ApplicationConfigurationMetadataResolver metadataResolver;
 
-	private ResourceLoader resourceLoader = new DefaultResourceLoader();
-
 	private ForkJoinPool forkJoinPool;
 
-	public AppRegistryController(AppRegistry appRegistry, ApplicationConfigurationMetadataResolver metadataResolver,
+	private ResourceLoader resourceLoader = new DefaultResourceLoader();
+
+	public AppRegistryController(Optional<StreamDefinitionRepository> streamDefinitionRepository,
+			Optional<StreamService> streamService,
+			AppRegistryService appRegistryService,
+			ApplicationConfigurationMetadataResolver metadataResolver,
 			ForkJoinPool forkJoinPool) {
-		this.appRegistry = appRegistry;
+		this.streamDefinitionRepository = streamDefinitionRepository.isPresent() ? streamDefinitionRepository.get() : null;
+		this.streamService = streamService.isPresent() ? streamService.get() : null;
+		this.appRegistryService = appRegistryService;
 		this.metadataResolver = metadataResolver;
 		this.forkJoinPool = forkJoinPool;
 	}
 
 	/**
-	 * List app registrations. Optional type and search parameters can be
-	 * passed to do filtering. Search parameter only filters by {@code AppRegistration}
-	 * name field.
+	 * List app registrations. Optional type and findByTaskNameContains parameters can be passed to do
+	 * filtering. Search parameter only filters by {@code AppRegistration} name field.
 	 *
+	 * @param pageable Pagination information
 	 * @param pagedResourcesAssembler the resource assembler for app registrations
 	 * @param type the application type: source, sink, processor, task
-	 * @param search optional search parameter
+	 * @param search optional findByTaskNameContains parameter
 	 * @return the list of registered applications
 	 */
 	@RequestMapping(method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<? extends AppRegistrationResource> list(
+	public PagedModel<? extends AppRegistrationResource> list(
 			Pageable pageable,
 			PagedResourcesAssembler<AppRegistration> pagedResourcesAssembler,
 			@RequestParam(value = "type", required = false) ApplicationType type,
 			@RequestParam(required = false) String search) {
-		Page<AppRegistration> pagedRegistrations;
-		if (type == null && search == null) {
-			pagedRegistrations = appRegistry.findAll(pageable);
-		}
-		else {
-			List<AppRegistration> appRegistrations = appRegistry.findAll().stream()
-				.filter(ar -> (type != null ? ar.getType() == type : true))
-				.filter(ar -> (StringUtils.hasText(search) ? ar.getName().contains(search) : true))
-				.collect(Collectors.toList());
-			long count = appRegistrations.size();
-			long to = Math.min(count, pageable.getOffset() + pageable.getPageSize());
 
-			// if a request for page is higher than number of items we actually have is either
-			// a rogue request or user was in high pages and applied filtering.
-			// in this case we simply reset to first page.
-			// we also need to explicitly set page and see what offset is when
-			// building new page.
-			// all this is done because we don't use a proper repository which would
-			// handle all these automatically.
-			int offset = 0;
-			int page = 0;
-			if (pageable.getOffset() <= to) {
-				offset = pageable.getOffset();
-				page = pageable.getPageNumber();
-			}
-			else if (pageable.getOffset() + pageable.getPageSize() <= to) {
-				offset = pageable.getOffset();
-			}
-			pagedRegistrations = new PageImpl<>(appRegistrations.subList(offset, (int) to),
-					new PageRequest(page, pageable.getPageSize()), appRegistrations.size());
-		}
+		Page<AppRegistration> pagedRegistrations = this.appRegistryService.findAllByTypeAndNameIsLike(type, search,
+				pageable);
 
-		return pagedResourcesAssembler.toResource(pagedRegistrations, this.assembler);
-
+		return pagedResourcesAssembler.toModel(pagedRegistrations, this.assembler);
 	}
 
 	/**
@@ -154,20 +140,44 @@ public class AppRegistryController implements ResourceLoaderAware {
 	 *
 	 * @param type application type
 	 * @param name application name
+	 * @param version application version
+	 * @param exhaustive if set to true all properties are returned
 	 * @return detailed application information
 	 */
-	@RequestMapping(value = "/{type}/{name}", method = RequestMethod.GET)
+	@RequestMapping(value = "/{type}/{name}/{version:.+}", method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
 	public DetailedAppRegistrationResource info(@PathVariable("type") ApplicationType type,
-			@PathVariable("name") String name) {
-		AppRegistration registration = appRegistry.find(name, type);
-		if (registration == null) {
+			@PathVariable("name") String name, @PathVariable("version") String version,
+			@RequestParam(required = false, name = "exhaustive") boolean exhaustive) {
+
+		return getInfo(type, name, version, exhaustive);
+	}
+
+	@Deprecated
+	@RequestMapping(value = "/{type}/{name}", method = RequestMethod.GET)
+	@ResponseStatus(HttpStatus.OK)
+	public DetailedAppRegistrationResource info(
+			@PathVariable("type") ApplicationType type, @PathVariable("name") String name,
+			@RequestParam(required = false, name = "exhaustive") boolean exhaustive) {
+		if (!this.appRegistryService.appExist(name, type)) {
 			throw new NoSuchAppRegistrationException(name, type);
 		}
+
+		String defaultVersion = this.appRegistryService.getDefaultApp(name, type).getVersion();
+		return getInfo(type, name, defaultVersion, exhaustive);
+	}
+
+	private DetailedAppRegistrationResource getInfo(ApplicationType type,
+			String name, String version, Boolean allProperties) {
+
+		AppRegistration registration = appRegistryService.find(name, type, version);
+		if (registration == null) {
+			throw new NoSuchAppRegistrationException(name, type, version);
+		}
 		DetailedAppRegistrationResource result = new DetailedAppRegistrationResource(
-				assembler.toResource(registration));
+				assembler.toModel(registration));
 		List<ConfigurationMetadataProperty> properties = metadataResolver
-				.listProperties(appRegistry.getAppMetadataResource(registration));
+				.listProperties(appRegistryService.getAppMetadataResource(registration), allProperties);
 		for (ConfigurationMetadataProperty property : properties) {
 			result.addOption(property);
 		}
@@ -179,22 +189,25 @@ public class AppRegistryController implements ResourceLoaderAware {
 	 *
 	 * @param type module type
 	 * @param name module name
-	 * @param uri URI for the module artifact (e.g.
-	 * {@literal maven://group:artifact:version})
+	 * @param version module version
+	 * @param uri URI for the module artifact (e.g. {@literal maven://group:artifact:version})
 	 * @param metadataUri URI for the metadata artifact
 	 * @param force if {@code true}, overwrites a pre-existing registration
 	 */
-	@RequestMapping(value = "/{type}/{name}", method = RequestMethod.POST)
+	@RequestMapping(value = "/{type}/{name}/{version:.+}", method = RequestMethod.POST)
 	@ResponseStatus(HttpStatus.CREATED)
 	public void register(@PathVariable("type") ApplicationType type, @PathVariable("name") String name,
+			@PathVariable("version") String version,
 			@RequestParam("uri") String uri, @RequestParam(name = "metadata-uri", required = false) String metadataUri,
 			@RequestParam(value = "force", defaultValue = "false") boolean force) {
-		AppRegistration previous = appRegistry.find(name, type);
+
+		appRegistryService.validate(appRegistryService.getDefaultApp(name, type), uri, version);
+		AppRegistration previous = appRegistryService.find(name, type, version);
 		if (!force && previous != null) {
 			throw new AppAlreadyRegisteredException(previous);
 		}
 		try {
-			AppRegistration registration = appRegistry.save(name, type, new URI(uri),
+			AppRegistration registration = this.appRegistryService.save(name, type, version, new URI(uri),
 					metadataUri != null ? new URI(metadataUri) : null);
 			prefetchMetadata(Arrays.asList(registration));
 		}
@@ -203,23 +216,154 @@ public class AppRegistryController implements ResourceLoaderAware {
 		}
 	}
 
+	@Deprecated
+	@RequestMapping(value = "/{type}/{name}", method = RequestMethod.POST)
+	@ResponseStatus(HttpStatus.CREATED)
+	public void register(@PathVariable("type") ApplicationType type, @PathVariable("name") String name,
+			@RequestParam("uri") String uri, @RequestParam(name = "metadata-uri", required = false) String metadataUri,
+			@RequestParam(value = "force", defaultValue = "false") boolean force) {
+		String version = this.appRegistryService.getResourceVersion(uri);
+		this.register(type, name, version, uri, metadataUri, force);
+	}
+
+	/**
+	 * Set a module version as default
+	 *
+	 * @param type module type
+	 * @param name module name
+	 * @param version module version
+	 */
+	@RequestMapping(value = "/{type}/{name}/{version:.+}", method = RequestMethod.PUT)
+	@ResponseStatus(HttpStatus.ACCEPTED)
+	public void makeDefault(@PathVariable("type") ApplicationType type, @PathVariable("name") String name,
+			@PathVariable("version") String version) {
+		this.appRegistryService.setDefaultApp(name, type, version);
+	}
+
 	/**
 	 * Unregister an application by name and type. If the application does not exist, a
 	 * {@link NoSuchAppRegistrationException} will be thrown.
 	 *
 	 * @param type the application type
 	 * @param name the application name
+	 * @param version application version
 	 */
-	@RequestMapping(value = "/{type}/{name}", method = RequestMethod.DELETE)
+	@RequestMapping(value = "/{type}/{name}/{version:.+}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
-	public void unregister(@PathVariable("type") ApplicationType type, @PathVariable("name") String name) {
-		appRegistry.delete(name, type);
+	public void unregister(@PathVariable("type") ApplicationType type, @PathVariable("name") String name,
+			@PathVariable("version") String version) {
+
+		if (type != ApplicationType.task) {
+			String streamWithApp = findStreamContainingAppOf(type, name, version);
+			if (streamWithApp != null) {
+				throw new UnregisterAppException(String.format("The app [%s:%s:%s] you're trying to unregister is " +
+						"currently used in stream '%s'.", name, type, version, streamWithApp));
+			}
+		}
+
+		if (!this.appRegistryService.appExist(name, type, version)) {
+			throw new NoSuchAppRegistrationException(name, type, version);
+		}
+
+		appRegistryService.delete(name, type, version);
 	}
 
 	/**
-	 * Register all applications listed in a properties file or provided as key/value
-	 * pairs.
+	 * Given the application type, name, and version, determine if it is being used in a deployed stream definition.
 	 *
+	 * @param appType the application type
+	 * @param appName the application name
+	 * @param appVersion application version
+	 * @return the name of the deployed stream where the app is being used.  If the app is not deployed in a stream,
+	 * return {@code null}.
+	 */
+	private String findStreamContainingAppOf(ApplicationType appType, String appName, String appVersion) {
+		if (this.streamDefinitionRepository == null || this.streamService == null) {
+			return null;
+		}
+		Iterable<StreamDefinition> streamDefinitions = streamDefinitionRepository.findAll();
+		for (StreamDefinition streamDefinition : streamDefinitions) {
+			StreamDeployment streamDeployment = this.streamService.info(streamDefinition.getName());
+			for (StreamAppDefinition streamAppDefinition : streamDefinition.getAppDefinitions()) {
+				final String streamAppName = streamAppDefinition.getRegisteredAppName();
+				final ApplicationType streamAppType = streamAppDefinition.getApplicationType();
+				if (appType != streamAppType) {
+					continue;
+				}
+				Map<String, Map<String, String>> streamDeploymentPropertiesMap;
+				String streamDeploymentPropertiesString = streamDeployment.getDeploymentProperties();
+				if (!StringUtils.hasText(streamDeploymentPropertiesString)) {
+					continue;
+				}
+				ObjectMapper objectMapper = new ObjectMapper();
+				try {
+					streamDeploymentPropertiesMap = objectMapper.readValue(streamDeploymentPropertiesString,
+							new TypeReference<Map<String, Map<String, String>>>() {
+							});
+				}
+				catch (IOException e) {
+					throw new RuntimeException("Can not deserialize Stream Deployment Properties JSON '"
+							+ streamDeploymentPropertiesString + "'");
+				}
+				if (streamDeploymentPropertiesMap.containsKey(appName)) {
+					Map<String, String> appDeploymentProperties = streamDeploymentPropertiesMap.get(streamAppName);
+					if (appDeploymentProperties.containsKey(SkipperStream.SKIPPER_SPEC_VERSION)) {
+						String version = appDeploymentProperties.get(SkipperStream.SKIPPER_SPEC_VERSION);
+						if (version != null && version.equals(appVersion)) {
+							return streamDefinition.getName();
+						}
+					}
+				}
+			}
+		}
+		return null;
+	}
+
+	@Deprecated
+	@RequestMapping(value = "/{type}/{name}", method = RequestMethod.DELETE)
+	@ResponseStatus(HttpStatus.OK)
+	public void unregister(@PathVariable("type") ApplicationType type, @PathVariable("name") String name) {
+		if (this.appRegistryService.find(name, type) == null) {
+			throw new NoSuchAppRegistrationException(name, type);
+		}
+		AppRegistration appRegistration = this.appRegistryService.getDefaultApp(name, type);
+		if (appRegistration == null) {
+			throw new RuntimeException(String.format("No default version exists for the app [%s:%s]", name, type));
+		}
+		this.unregister(type, name, appRegistration.getVersion());
+	}
+
+	@RequestMapping(method = RequestMethod.DELETE)
+	@ResponseStatus(HttpStatus.OK)
+	public void unregisterAll() {
+		List<AppRegistration> appRegistrations = appRegistryService.findAll();
+		List<AppRegistration> appRegistrationsToUnregister = new ArrayList<>();
+
+		for (AppRegistration appRegistration : appRegistrations) {
+			String applicationName = appRegistration.getName();
+			String applicationVersion = appRegistration.getVersion();
+			ApplicationType applicationType = appRegistration.getType();
+
+			if (applicationType != ApplicationType.task) {
+				String streamWithApp = findStreamContainingAppOf(applicationType, applicationName, applicationVersion);
+
+				if (streamWithApp == null) {
+					appRegistrationsToUnregister.add(appRegistration);
+				}
+			} else {
+				appRegistrationsToUnregister.add(appRegistration);
+			}
+		}
+
+		if (!appRegistrationsToUnregister.isEmpty()) {
+			appRegistryService.deleteAll(appRegistrationsToUnregister);
+		}
+	}
+
+	/**
+	 * Register all applications listed in a properties file or provided as key/value pairs.
+	 *
+	 * @param pageable Pagination information
 	 * @param pagedResourcesAssembler the resource asembly for app registrations
 	 * @param uri URI for the properties file
 	 * @param apps key/value pairs representing applications, separated by newlines
@@ -229,27 +373,25 @@ public class AppRegistryController implements ResourceLoaderAware {
 	 */
 	@RequestMapping(method = RequestMethod.POST)
 	@ResponseStatus(HttpStatus.CREATED)
-	public PagedResources<? extends AppRegistrationResource> registerAll(
+	public PagedModel<? extends AppRegistrationResource> registerAll(
 			Pageable pageable,
 			PagedResourcesAssembler<AppRegistration> pagedResourcesAssembler,
 			@RequestParam(value = "uri", required = false) String uri,
-			@RequestParam(value = "apps", required = false) Properties apps,
+			@RequestParam(value = "apps", required = false) String apps,
 			@RequestParam(value = "force", defaultValue = "false") boolean force) throws IOException {
 		List<AppRegistration> registrations = new ArrayList<>();
+
 		if (StringUtils.hasText(uri)) {
-			registrations.addAll(appRegistry.importAll(force, resourceLoader.getResource(uri)));
+			registrations.addAll(this.appRegistryService.importAll(force, this.resourceLoader.getResource(uri)));
 		}
-		else if (!CollectionUtils.isEmpty(apps)) {
-			ByteArrayOutputStream baos = new ByteArrayOutputStream();
-			apps.store(baos, "");
-			ByteArrayResource bar = new ByteArrayResource(baos.toByteArray(), "Inline properties");
-			registrations.addAll(appRegistry.importAll(force, bar));
+		else if (!StringUtils.isEmpty(apps)) {
+			ByteArrayResource bar = new ByteArrayResource(apps.getBytes());
+			registrations.addAll(this.appRegistryService.importAll(force, bar));
 		}
+
 		Collections.sort(registrations);
 		prefetchMetadata(registrations);
-		return pagedResourcesAssembler.toResource(
-				new PageImpl<>(registrations, pageable, appRegistry.findAll().size()),
-				assembler);
+		return pagedResourcesAssembler.toModel(new PageImpl<>(registrations, pageable, registrations.size()), this.assembler);
 	}
 
 	/**
@@ -262,7 +404,7 @@ public class AppRegistryController implements ResourceLoaderAware {
 			appRegistrations.stream().filter(r -> r.getMetadataUri() != null).parallel().forEach(r -> {
 				logger.info("Eagerly fetching {}", r.getMetadataUri());
 				try {
-					this.appRegistry.getAppMetadataResource(r);
+					this.appRegistryService.getAppMetadataResource(r);
 				}
 				catch (Exception e) {
 					logger.warn("Could not fetch " + r.getMetadataUri(), e);
@@ -271,27 +413,22 @@ public class AppRegistryController implements ResourceLoaderAware {
 		});
 	}
 
-	@Override
-	public void setResourceLoader(ResourceLoader resourceLoader) {
-		this.resourceLoader = resourceLoader;
-	}
-
-	class Assembler extends ResourceAssemblerSupport<AppRegistration, AppRegistrationResource> {
+	class Assembler extends RepresentationModelAssemblerSupport<AppRegistration, AppRegistrationResource> {
 
 		public Assembler() {
 			super(AppRegistryController.class, AppRegistrationResource.class);
 		}
 
 		@Override
-		public AppRegistrationResource toResource(AppRegistration registration) {
-			return createResourceWithId(String.format("%s/%s", registration.getType(), registration.getName()),
-					registration);
+		public AppRegistrationResource toModel(AppRegistration registration) {
+			return createModelWithId(String.format("%s/%s/%s", registration.getType(), registration.getName(),
+					registration.getVersion()), registration);
 		}
 
 		@Override
-		protected AppRegistrationResource instantiateResource(AppRegistration registration) {
+		protected AppRegistrationResource instantiateModel(AppRegistration registration) {
 			return new AppRegistrationResource(registration.getName(), registration.getType().name(),
-					registration.getUri().toString());
+					registration.getVersion(), registration.getUri().toString(), registration.isDefaultVersion());
 		}
 	}
 }

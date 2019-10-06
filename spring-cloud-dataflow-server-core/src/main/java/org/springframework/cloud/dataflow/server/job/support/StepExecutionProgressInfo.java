@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -106,14 +106,16 @@ public class StepExecutionProgressInfo {
 
 		CumulativeHistory readHistory = stepExecutionHistory.getReadCount();
 
+		double result = 0.0;
 		if (readHistory.getMean() == 0) {
 			percentCompleteBasis = PercentCompleteBasis.DURATION;
-			return getDurationBasedEstimate(duration);
+			result = getDurationBasedEstimate(duration);
 		}
-
-		percentCompleteBasis = PercentCompleteBasis.READCOUNT;
-		return stepExecution.getReadCount() / readHistory.getMean();
-
+		else {
+			percentCompleteBasis = PercentCompleteBasis.READCOUNT;
+			result = stepExecution.getReadCount() / readHistory.getMean();
+		}
+		return result;
 	}
 
 	private double getDurationBasedEstimate(double duration) {

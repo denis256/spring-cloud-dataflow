@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,8 +26,9 @@ import org.junit.rules.ExpectedException;
 import org.junit.runner.RunWith;
 
 import org.springframework.cloud.dataflow.configuration.metadata.BootApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.StreamAppDefinition;
-import org.springframework.cloud.dataflow.registry.AppRegistry;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 import org.springframework.cloud.dataflow.server.config.apps.CommonApplicationProperties;
 import org.springframework.cloud.deployer.spi.core.AppDefinition;
 import org.springframework.core.io.ClassPathResource;
@@ -51,7 +52,7 @@ public class AppDeploymentRequestCreatorTests {
 
 	@Before
 	public void setupMock() {
-		this.appDeploymentRequestCreator = new AppDeploymentRequestCreator(mock(AppRegistry.class),
+		this.appDeploymentRequestCreator = new AppDeploymentRequestCreator(mock(AppRegistryService.class),
 				mock(CommonApplicationProperties.class),
 				new BootApplicationConfigurationMetadataResolver());
 	}
@@ -59,6 +60,7 @@ public class AppDeploymentRequestCreatorTests {
 	@Test
 	public void testRequalifyShortWhiteListedProperty() {
 		StreamAppDefinition appDefinition = new StreamAppDefinition.Builder().setRegisteredAppName("my-app")
+				.setApplicationType(ApplicationType.app)
 				.setProperty("timezone", "GMT+2").build("streamname");
 
 		Resource app = new ClassPathResource("/apps/whitelist-source");
@@ -72,6 +74,7 @@ public class AppDeploymentRequestCreatorTests {
 	@Test
 	public void testSameNamePropertiesOKAsLongAsNotUsedAsShorthand() {
 		StreamAppDefinition appDefinition = new StreamAppDefinition.Builder().setRegisteredAppName("my-app")
+				.setApplicationType(ApplicationType.app)
 				.setProperty("time.format", "hh").setProperty("date.format", "yy").build("streamname");
 
 		Resource app = new ClassPathResource("/apps/whitelist-source");
@@ -85,6 +88,7 @@ public class AppDeploymentRequestCreatorTests {
 	@Test
 	public void testSameNamePropertiesKOWhenShorthand() {
 		StreamAppDefinition appDefinition = new StreamAppDefinition.Builder().setRegisteredAppName("my-app")
+				.setApplicationType(ApplicationType.app)
 				.setProperty("format", "hh").build("streamname");
 
 		Resource app = new ClassPathResource("/apps/whitelist-source");
@@ -100,6 +104,7 @@ public class AppDeploymentRequestCreatorTests {
 	@Test
 	public void testShorthandsAcceptRelaxedVariations() {
 		StreamAppDefinition appDefinition = new StreamAppDefinition.Builder().setRegisteredAppName("my-app")
+				.setApplicationType(ApplicationType.app)
 				.setProperty("someLongProperty", "yy") // Use camelCase here
 				.build("streamname");
 

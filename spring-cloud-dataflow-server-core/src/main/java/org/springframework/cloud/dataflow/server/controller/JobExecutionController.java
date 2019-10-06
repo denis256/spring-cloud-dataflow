@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,7 +19,6 @@ package org.springframework.cloud.dataflow.server.controller;
 import java.util.List;
 import java.util.TimeZone;
 
-import org.springframework.batch.admin.service.JobService;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.batch.core.launch.JobExecutionNotRunningException;
 import org.springframework.batch.core.launch.NoSuchJobException;
@@ -29,14 +28,15 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cloud.dataflow.rest.job.TaskJobExecution;
 import org.springframework.cloud.dataflow.rest.job.support.TimeUtils;
 import org.springframework.cloud.dataflow.rest.resource.JobExecutionResource;
+import org.springframework.cloud.dataflow.server.batch.JobService;
 import org.springframework.cloud.dataflow.server.service.TaskJobService;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedResourcesAssembler;
-import org.springframework.hateoas.ExposesResourceFor;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.mvc.ResourceAssemblerSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.server.ExposesResourceFor;
+import org.springframework.hateoas.server.mvc.RepresentationModelAssemblerSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -86,17 +86,17 @@ public class JobExecutionController {
 	 */
 	@RequestMapping(value = "", method = RequestMethod.GET, produces = "application/json")
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<JobExecutionResource> list(Pageable pageable,
+	public PagedModel<JobExecutionResource> list(Pageable pageable,
 			PagedResourcesAssembler<TaskJobExecution> assembler) throws NoSuchJobExecutionException {
 		List<TaskJobExecution> jobExecutions = taskJobService.listJobExecutions(pageable);
 		Page<TaskJobExecution> page = new PageImpl<>(jobExecutions, pageable, taskJobService.countJobExecutions());
-		return assembler.toResource(page, jobAssembler);
+		return assembler.toModel(page, jobAssembler);
 	}
 
 	/**
 	 * Retrieve all task job executions with the task name specified
 	 *
-	 * @param jobName name of the job
+	 * @param jobName name of the job. SQL server specific wildcards are enabled (eg.: myJob%, m_Job, ...)
 	 * @param pageable page-able collection of {@code TaskJobExecution}s.
 	 * @param assembler for the {@link TaskJobExecution}s
 	 * @return list task/job executions with the specified jobName.
@@ -104,12 +104,12 @@ public class JobExecutionController {
 	 */
 	@RequestMapping(value = "", method = RequestMethod.GET, params = "name", produces = "application/json")
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<JobExecutionResource> retrieveJobsByName(@RequestParam("name") String jobName,
+	public PagedModel<JobExecutionResource> retrieveJobsByName(@RequestParam("name") String jobName,
 			Pageable pageable, PagedResourcesAssembler<TaskJobExecution> assembler) throws NoSuchJobException {
 		List<TaskJobExecution> jobExecutions = taskJobService.listJobExecutionsForJob(pageable, jobName);
 		Page<TaskJobExecution> page = new PageImpl<>(jobExecutions, pageable,
 				taskJobService.countJobExecutionsForJob(jobName));
-		return assembler.toResource(page, jobAssembler);
+		return assembler.toModel(page, jobAssembler);
 	}
 
 	/**
@@ -127,7 +127,7 @@ public class JobExecutionController {
 		if (jobExecution == null) {
 			throw new NoSuchJobExecutionException(String.format("No Job Execution with id of %d exits", id));
 		}
-		return jobAssembler.toResource(jobExecution);
+		return jobAssembler.toModel(jobExecution);
 	}
 
 	/**
@@ -164,10 +164,10 @@ public class JobExecutionController {
 	}
 
 	/**
-	 * {@link org.springframework.hateoas.ResourceAssembler} implementation that converts
+	 * {@link org.springframework.hateoas.server.ResourceAssembler} implementation that converts
 	 * {@link JobExecution}s to {@link JobExecutionResource}s.
 	 */
-	private static class Assembler extends ResourceAssemblerSupport<TaskJobExecution, JobExecutionResource> {
+	private static class Assembler extends RepresentationModelAssemblerSupport<TaskJobExecution, JobExecutionResource> {
 
 		private TimeZone timeZone = TimeUtils.getDefaultTimeZone();
 
@@ -185,12 +185,12 @@ public class JobExecutionController {
 		}
 
 		@Override
-		public JobExecutionResource toResource(TaskJobExecution taskJobExecution) {
-			return createResourceWithId(taskJobExecution.getJobExecution().getId(), taskJobExecution);
+		public JobExecutionResource toModel(TaskJobExecution taskJobExecution) {
+			return createModelWithId(taskJobExecution.getJobExecution().getId(), taskJobExecution);
 		}
 
 		@Override
-		public JobExecutionResource instantiateResource(TaskJobExecution taskJobExecution) {
+		public JobExecutionResource instantiateModel(TaskJobExecution taskJobExecution) {
 			return new JobExecutionResource(taskJobExecution, timeZone);
 		}
 	}

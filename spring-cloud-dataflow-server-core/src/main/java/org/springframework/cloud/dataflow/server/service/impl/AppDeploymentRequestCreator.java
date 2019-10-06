@@ -1,11 +1,11 @@
 /*
- * Copyright 2017 the original author or authors.
+ * Copyright 2017-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -15,7 +15,6 @@
  */
 package org.springframework.cloud.dataflow.server.service.impl;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -23,20 +22,19 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.BindingPropertyKeys;
 import org.springframework.cloud.dataflow.core.DataFlowPropertyKeys;
 import org.springframework.cloud.dataflow.core.StreamAppDefinition;
 import org.springframework.cloud.dataflow.core.StreamDefinition;
 import org.springframework.cloud.dataflow.core.StreamPropertyKeys;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 import org.springframework.cloud.dataflow.rest.util.DeploymentPropertiesUtils;
-import org.springframework.cloud.dataflow.server.DataFlowServerUtil;
 import org.springframework.cloud.dataflow.server.config.apps.CommonApplicationProperties;
 import org.springframework.cloud.dataflow.server.controller.WhitelistProperties;
 import org.springframework.cloud.deployer.spi.app.AppDeployer;
@@ -59,18 +57,18 @@ public class AppDeploymentRequestCreator {
 
 	private static final String DEFAULT_PARTITION_KEY_EXPRESSION = "payload";
 
-	private static Log logger = LogFactory.getLog(AppDeploymentRequestCreator.class);
+	private static final Logger logger = LoggerFactory.getLogger(AppDeploymentRequestCreator.class);
 
-	private final AppRegistryCommon appRegistry;
+	private final AppRegistryService appRegistry;
 
 	private final CommonApplicationProperties commonApplicationProperties;
 
 	private final WhitelistProperties whitelistProperties;
 
-	public AppDeploymentRequestCreator(AppRegistryCommon appRegistry,
+	public AppDeploymentRequestCreator(AppRegistryService appRegistry,
 			CommonApplicationProperties commonApplicationProperties,
 			ApplicationConfigurationMetadataResolver metadataResolver) {
-		Assert.notNull(appRegistry, "AppRegistry must not be null");
+		Assert.notNull(appRegistry, "AppRegistryService must not be null");
 		Assert.notNull(commonApplicationProperties, "CommonApplicationProperties must not be null");
 		Assert.notNull(metadataResolver, "MetadataResolver must not be null");
 		this.appRegistry = appRegistry;
@@ -87,7 +85,7 @@ public class AppDeploymentRequestCreator {
 		Iterator<StreamAppDefinition> iterator = streamDefinition.getDeploymentOrderIterator();
 		while (iterator.hasNext()) {
 			StreamAppDefinition currentApp = iterator.next();
-			ApplicationType type = DataFlowServerUtil.determineApplicationType(currentApp);
+			ApplicationType type = currentApp.getApplicationType();
 			AppRegistration appRegistration = this.appRegistry.find(currentApp.getRegisteredAppName(), type);
 			Assert.notNull(appRegistration,
 					String.format("no application '%s' of type '%s' exists in the registry",
@@ -103,15 +101,9 @@ public class AppDeploymentRequestCreator {
 					.extractAndQualifyDeployerProperties(updateProperties, currentApp.getName());
 
 			Resource appResource = appRegistry.getAppResource(appRegistration);
-			try {
-				logger.info(String.format("Downloading resource URI [%s]", appResource.getURI()));
-			}
-			catch (IOException e) {
-			}
 			Resource metadataResource = appRegistry.getAppMetadataResource(appRegistration);
-
-			Map<String, String> expandedAppUpdateTimeProperties = this.whitelistProperties
-					.qualifyProperties(appUpdateTimeProperties, metadataResource);
+			Map<String, String> expandedAppUpdateTimeProperties = (appUpdateTimeProperties.isEmpty()) ? new HashMap<>():
+				this.whitelistProperties.qualifyProperties(appUpdateTimeProperties, metadataResource);
 
 			expandedAppUpdateTimeProperties.put(DataFlowPropertyKeys.STREAM_APP_TYPE, type.toString());
 			AppDefinition appDefinition = new AppDefinition(currentApp.getName(), expandedAppUpdateTimeProperties);
@@ -152,10 +144,9 @@ public class AppDeploymentRequestCreator {
 		boolean isDownStreamAppPartitioned = false;
 		while (iterator.hasNext()) {
 			StreamAppDefinition currentApp = iterator.next();
-			ApplicationType type = DataFlowServerUtil.determineApplicationType(currentApp);
-			AppRegistration appRegistration = this.appRegistry.find(currentApp.getRegisteredAppName(), type);
+			AppRegistration appRegistration = this.appRegistry.find(currentApp.getRegisteredAppName(), currentApp.getApplicationType());
 			Assert.notNull(appRegistration, String.format("no application '%s' of type '%s' exists in the registry",
-					currentApp.getName(), type));
+					currentApp.getName(), currentApp.getApplicationType()));
 
 			Map<String, String> appDeployTimeProperties = extractAppProperties(currentApp, streamDeploymentProperties);
 			Map<String, String> deployerDeploymentProperties = DeploymentPropertiesUtils
@@ -169,26 +160,32 @@ public class AppDeploymentRequestCreator {
 				commandlineArguments.add(version);
 			}
 
-			boolean upstreamAppSupportsPartition = upstreamAppHasPartitionInfo(streamDefinition, currentApp,
-					streamDeploymentProperties);
 			// Set instance count property
 			if (deployerDeploymentProperties.containsKey(AppDeployer.COUNT_PROPERTY_KEY)) {
 				appDeployTimeProperties.put(StreamPropertyKeys.INSTANCE_COUNT,
 						deployerDeploymentProperties.get(AppDeployer.COUNT_PROPERTY_KEY));
 			}
 
-			if (upstreamAppSupportsPartition) {
-				deployerDeploymentProperties.put(AppDeployer.INDEXED_PROPERTY_KEY, "true");
-				updateConsumerPartitionProperties(appDeployTimeProperties);
-			}
+			boolean upstreamAppSupportsPartition = upstreamAppHasPartitionInfo(streamDefinition, currentApp,
+					streamDeploymentProperties);
 
-			// producer app partition properties
-			if (isDownStreamAppPartitioned) {
-				updateProducerPartitionProperties(appDeployTimeProperties, nextAppCount);
+			if (currentApp.getApplicationType() != ApplicationType.app) {
+				if (upstreamAppSupportsPartition) {
+					deployerDeploymentProperties.put(AppDeployer.INDEXED_PROPERTY_KEY, "true");
+					updateConsumerPartitionProperties(appDeployTimeProperties);
+				}
+
+				// producer app partition properties
+				if (isDownStreamAppPartitioned) {
+					updateProducerPartitionProperties(appDeployTimeProperties, nextAppCount);
+				}
 			}
 
 			nextAppCount = getInstanceCount(deployerDeploymentProperties);
-			isDownStreamAppPartitioned = isPartitionedConsumer(appDeployTimeProperties, upstreamAppSupportsPartition);
+
+			if (currentApp.getApplicationType() != ApplicationType.app) {
+				isDownStreamAppPartitioned = isPartitionedConsumer(appDeployTimeProperties, upstreamAppSupportsPartition);
+			}
 
 			logger.info(String.format("Creating resource with [%s] for application [%s]",
 					appRegistration.getUri().toString(), currentApp.getName()));
@@ -196,9 +193,11 @@ public class AppDeploymentRequestCreator {
 			Resource metadataResource = this.appRegistry.getAppMetadataResource(appRegistration);
 
 			// add properties needed for metrics system
+
+			// TODO removing adding these generated properties has other side effects....
 			appDeployTimeProperties.put(DataFlowPropertyKeys.STREAM_NAME, currentApp.getStreamName());
 			appDeployTimeProperties.put(DataFlowPropertyKeys.STREAM_APP_LABEL, currentApp.getName());
-			appDeployTimeProperties.put(DataFlowPropertyKeys.STREAM_APP_TYPE, type.toString());
+			appDeployTimeProperties.put(DataFlowPropertyKeys.STREAM_APP_TYPE, currentApp.getApplicationType().toString());
 			StringBuilder sb = new StringBuilder().append(currentApp.getStreamName()).append(".")
 					.append(currentApp.getName()).append(".").append("${spring.cloud.application.guid}");
 			appDeployTimeProperties.put(StreamPropertyKeys.METRICS_KEY, sb.toString());
@@ -231,7 +230,6 @@ public class AppDeploymentRequestCreator {
 	/* default */ Map<String, String> extractAppProperties(StreamAppDefinition appDefinition,
 			Map<String, String> streamDeploymentProperties) {
 		Map<String, String> appDeploymentProperties = new HashMap<>();
-		// add common properties first
 		appDeploymentProperties.putAll(this.commonApplicationProperties.getStream());
 		// add properties with wild card prefix
 		String wildCardProducerPropertyPrefix = "app.*.producer.";

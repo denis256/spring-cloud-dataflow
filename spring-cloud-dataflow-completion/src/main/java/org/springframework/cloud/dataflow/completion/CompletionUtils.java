@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2016 the original author or authors.
+ * Copyright 2015-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -55,7 +55,9 @@ public class CompletionUtils {
 	 * Return the type(s) a given stream app definition <em>could</em> have, in the
 	 * context of code completion.
 	 */
-	static ApplicationType[] determinePotentialTypes(StreamAppDefinition appDefinition) {
+	static ApplicationType[] determinePotentialTypes(StreamAppDefinition appDefinition,
+			boolean multipleAppsInStreamDefinition) {
+		ApplicationType[] result = null;
 		Set<String> properties = appDefinition.getProperties().keySet();
 		if (properties.contains(BindingPropertyKeys.INPUT_DESTINATION)) {
 			// Can't be source. For the purpose of completion, being the last app
@@ -64,15 +66,22 @@ public class CompletionUtils {
 			// with a sink (could be an unfinished "source | processor | processor"
 			// stream)
 			if (properties.contains(BindingPropertyKeys.OUTPUT_DESTINATION)) {
-				return new ApplicationType[] { ApplicationType.processor };
+				result = new ApplicationType[] { ApplicationType.processor };
 			}
 			else {
-				return new ApplicationType[] { ApplicationType.processor, ApplicationType.sink };
+				result = new ApplicationType[] { ApplicationType.processor, ApplicationType.sink };
 			}
-		} // MUST be source
-		else {
-			return new ApplicationType[] { ApplicationType.source };
 		}
+		else {
+			// Multiple apps and no binding properties indicates unbound app sequence (a,b,c)
+			if (multipleAppsInStreamDefinition) {
+				result = new ApplicationType[] { ApplicationType.app };
+			}
+			else {
+				result = new ApplicationType[] { ApplicationType.source, ApplicationType.app };
+			}
+		}
+		return result;
 	}
 
 	/**

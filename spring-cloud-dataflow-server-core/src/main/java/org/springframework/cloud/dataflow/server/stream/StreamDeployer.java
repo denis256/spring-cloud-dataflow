@@ -1,11 +1,11 @@
 /*
- * Copyright 2017 the original author or authors.
+ * Copyright 2017-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,13 +17,13 @@ package org.springframework.cloud.dataflow.server.stream;
 
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ExecutionException;
 
 import org.springframework.cloud.dataflow.core.StreamDefinition;
 import org.springframework.cloud.dataflow.core.StreamDeployment;
 import org.springframework.cloud.deployer.spi.app.AppStatus;
 import org.springframework.cloud.deployer.spi.app.DeploymentState;
 import org.springframework.cloud.deployer.spi.core.RuntimeEnvironmentInfo;
+import org.springframework.cloud.skipper.domain.LogInfo;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 
@@ -45,19 +45,17 @@ public interface StreamDeployer {
 
 	/**
 	 * Get the deployment states for a list of stream definitions
-	 * @param content
+	 * @param streamDefinitions list of stream definitions
 	 * @return map of stream definition and its corresponding deployment state
 	 */
-	Map<StreamDefinition, DeploymentState> streamsStates(List<StreamDefinition> content);
+	Map<StreamDefinition, DeploymentState> streamsStates(List<StreamDefinition> streamDefinitions);
 
 	/**
 	 * Returns application statuses of all deployed applications
-	 * @param pageable
+	 * @param pageable Pagination information
 	 * @return pagable list of all app statuses
-	 * @throws ExecutionException
-	 * @throws InterruptedException
 	 */
-	Page<AppStatus> getAppStatuses(Pageable pageable) throws ExecutionException, InterruptedException;
+	Page<AppStatus> getAppStatuses(Pageable pageable);
 
 	/**
 	 * Gets runtime application status
@@ -65,6 +63,13 @@ public interface StreamDeployer {
 	 * @return app status
 	 */
 	AppStatus getAppStatus(String appDeploymentId);
+
+	/**
+	 * Returns the deployed application statuses part for the streamName stream.
+	 * @param streamName Stream name to retrieve the runtime application statues for
+	 * @return List of runtime application statues, part of the requested streamName.
+	 */
+	List<AppStatus> getStreamStatuses(String streamName);
 
 	/**
 	 * @return the runtime environment info for deploying streams.
@@ -77,4 +82,21 @@ public interface StreamDeployer {
 	 * @return stream deployment information
 	 */
 	StreamDeployment getStreamInfo(String streamName);
+
+	/**
+	 * Returns the logs of all the applications of the stream identified by the stream name.
+	 *
+	 * @param streamName the stream name
+	 * @return the logs content
+	 */
+	LogInfo getLog(String streamName);
+
+	/**
+	 * Returns the logs of a specific application in the stream identified by the stream name.
+	 *
+	 * @param streamName the stream name
+	 * @param appName specific application name inside the stream
+	 * @return the logs content
+	 */
+	LogInfo getLog(String streamName, String appName);
 }

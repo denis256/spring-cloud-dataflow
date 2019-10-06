@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,7 +28,7 @@ public class BindingPropertyKeys {
 	// @formatter:off (not working...)
 	private static final String ROOT_PREFIX = StreamPropertyKeys.PREFIX;
 
-	private static final String BINDING_KEY_PREFIX = ROOT_PREFIX + "bindings.";
+	public static final String BINDING_KEY_PREFIX = ROOT_PREFIX + "bindings.";
 
 	/**
 	 * Prefix used in property keys for output binding.

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,16 +25,12 @@ import org.springframework.cloud.dataflow.core.StreamAppDefinition;
 import org.springframework.cloud.dataflow.core.StreamDefinition;
 import org.springframework.cloud.dataflow.core.dsl.DSLMessage;
 import org.springframework.cloud.dataflow.core.dsl.ParseException;
-import org.springframework.cloud.dataflow.server.DataFlowServerUtil;
 import org.springframework.cloud.dataflow.server.repository.StreamDefinitionRepository;
 import org.springframework.util.StringUtils;
 
 /**
  * Expands constructs that start with {@literal :} to add stream name and app identifiers.
- * <p>
- * <p>
  * Lives in this package as it needs access to a {@link StreamDefinitionRepository}.
- * </p>
  *
  * @author Eric Bottard
  * @author Ilayaperumal Gopinathan
@@ -69,13 +65,14 @@ public class TapOnDestinationRecoveryStrategy implements RecoveryStrategy<ParseE
 
 		StreamDefinition streamDefinition = null;
 		if (StringUtils.hasText(streamName)) {
-			streamDefinition = streamDefinitionRepository.findOne(streamName);
+			// streamDefinition = streamDefinitionRepository.findOne(streamName);
+			streamDefinition = streamDefinitionRepository.findById(streamName).orElse(null);
 		}
 		// User has started to type an app name, or at least the stream name is valid
 		if (streamDefinition != null) {
 			CompletionProposal.Factory proposals = CompletionProposal.expanding(":" + streamName + ".");
 			for (StreamAppDefinition streamAppDefinition : streamDefinition.getAppDefinitions()) {
-				ApplicationType applicationType = DataFlowServerUtil.determineApplicationType(streamAppDefinition);
+				ApplicationType applicationType = streamAppDefinition.getApplicationType();
 				if (streamAppDefinition.getName().startsWith(appName)
 						&& !applicationType.equals(ApplicationType.sink)) {
 					collector.add(proposals.withSuffix(streamAppDefinition.getName()));

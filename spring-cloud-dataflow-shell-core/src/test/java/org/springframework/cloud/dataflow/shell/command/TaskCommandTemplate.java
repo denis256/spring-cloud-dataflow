@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2017 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -35,8 +35,13 @@ import static org.junit.Assert.fail;
  *
  * @author Glenn Renfro
  * @author Michael Minella
+ * @author David Turanski
  */
 public class TaskCommandTemplate {
+
+	private final static int WAIT_INTERVAL = 500;
+
+	private final static int MAX_WAIT_TIME = 3000;
 
 	private final JLineShellComponent shell;
 
@@ -54,17 +59,134 @@ public class TaskCommandTemplate {
 	/**
 	 * Create a task.
 	 * <p>
-	 * Note the name of the task will be stored so that when the method
-	 * destroyCreatedTasks is called, the task will be destroyed.
+	 * Note the name of the task will be stored so that when the method destroyCreatedTasks is
+	 * called, the task will be destroyed.
 	 *
 	 * @param taskName the name of the task
 	 * @param taskDefinition the task definition DSL
 	 * @param values will be injected into taskdefinition according to
-	 * {@link String#format(String, Object...)} syntax
+	 *     {@link String#format(String, Object...)} syntax
 	 */
 	public void create(String taskName, String taskDefinition, Object... values) {
 		doCreate(taskName, taskDefinition, true, values);
 	}
+
+	/**
+	 * Launch a task and validate the result from shell.
+	 *
+	 * @param taskName the name of the task
+	 */
+	public long launch(String taskName) {
+		// add the task name to the tasks list before assertion
+		tasks.add(taskName);
+		CommandResult cr = shell.executeCommand("task launch " + taskName);
+		CommandResult idResult = shell.executeCommand("task execution list --name " + taskName);
+		Table result = (Table) idResult.getResult();
+
+		long value = (long) result.getModel().getValue(1, 1);
+		assertTrue(cr.toString().contains("with execution id " + value));
+		return value;
+	}
+
+
+	/**
+	 * Launch a task and validate the result from shell.
+	 *
+	 * @param taskName the name of the task
+	 * @param ctrAppName the app to use when launching a ComposedTask if default is not wanted.
+	 */
+	public long launchWithAlternateCTR(String taskName, String ctrAppName) {
+		// add the task name to the tasks list before assertion
+		tasks.add(taskName);
+		CommandResult cr = shell.executeCommand(String.format("task launch %s --composedTaskRunnerName %s", taskName, ctrAppName));
+		CommandResult idResult = shell.executeCommand("task execution list --name " + taskName);
+		Table result = (Table) idResult.getResult();
+
+		long value = (long) result.getModel().getValue(1, 1);
+		assertTrue(cr.toString().contains("with execution id " + value));
+		return value;
+	}
+
+	/**
+	 * Launch a task and validate the result from shell on default platform.
+	 *
+	 * @param taskName the name of the task
+	 */
+	public String getTaskExecutionLog(String taskName) throws Exception{
+		long id = launchTaskExecutionForLog(taskName);
+		CommandResult cr = shell.executeCommand("task execution log --id " + id);
+		assertTrue(cr.toString().contains("Starting"));
+
+		return cr.toString();
+	}
+
+	/**
+	 * Launch a task with invalid platform.
+	 *
+	 * @param taskName the name of the task
+	 */
+	public void getTaskExecutionLogInvalidPlatform(String taskName) throws Exception{
+		long id = launchTaskExecutionForLog(taskName);
+		shell.executeCommand(String.format("task execution log --id %s --platformName %s", id, "foo"));
+	}
+
+	/**
+	 * Launch a task with invalid task execution id
+
+	 */
+	public void getTaskExecutionLogInvalidId() throws Exception{
+		CommandResult cr = shell.executeCommand(String.format("task execution log --id %s", 88));
+	}
+
+	private long launchTaskExecutionForLog(String taskName) throws Exception{
+		// add the task name to the tasks list before assertion
+		tasks.add(taskName);
+		CommandResult cr = shell.executeCommand(String.format("task launch %s", taskName));
+		CommandResult idResult = shell.executeCommand("task execution list --name " + taskName);
+		Table taskExecutionResult = (Table) idResult.getResult();
+
+		long id = (long) taskExecutionResult.getModel().getValue(1, 1);
+		assertTrue(cr.toString().contains("with execution id " + id));
+		waitForDBToBePopulated(id);
+		return id;
+	}
+
+	private void waitForDBToBePopulated(long id) throws Exception {
+		for (int waitTime = 0; waitTime <= MAX_WAIT_TIME; waitTime += WAIT_INTERVAL) {
+			Thread.sleep(WAIT_INTERVAL);
+			if (isEndTime(id)) {
+				break;
+			}
+		}
+	}
+
+	private boolean isEndTime(long id) {
+		CommandResult cr = taskExecutionStatus(id);
+		Table table = (Table) cr.getResult();
+		return (table.getModel().getValue(6, 1) != null);
+
+	}
+	/**
+	 * Stop a task execution.
+	 *
+	 * @param id the id of a {@link org.springframework.cloud.task.repository.TaskExecution}
+	 */
+	public CommandResult stop(long id) {
+		CommandResult cr = shell.executeCommand("task execution stop --ids "+ id);
+		return cr;
+	}
+
+	/**
+	 * Stop a task execution.
+	 *
+	 * @param id the id of a {@link org.springframework.cloud.task.repository.TaskExecution}
+	 * @param platform the name of the platform where the task is executing.
+	 */
+	public CommandResult stopForPlatform(long id, String platform) {
+		CommandResult cr = shell.executeCommand(String.format("task execution stop --ids %s --platformName %s", id, platform));
+		return cr;
+	}
+
 
 	/**
 	 * Executes a task execution list.
@@ -75,11 +197,32 @@ public class TaskCommandTemplate {
 	}
 
 	/**
+	 * Lists the platform accounts for tasks.
+	 */
+	public CommandResult taskPlatformList() {
+		return shell.executeCommand("task platform-list");
+	}
+
+	/**
 	 * Lists task executions by predefined name 'foo'.
 	 */
 	public CommandResult taskExecutionListByName() {
 		return shell.executeCommand("task execution list --name foo");
 
+	}
+
+	/**
+	 * Returns the count of currently executing tasks and related information.
+	 */
+	public CommandResult taskExecutionCurrent() {
+		return shell.executeCommand("task execution current");
+	}
+
+	/**
+	 * Validates the task definition.
+	 */
+	public CommandResult taskValidate(String taskDefinitionName) {
+		return shell.executeCommand("task validate " + taskDefinitionName);
 	}
 
 	/**
@@ -96,7 +239,6 @@ public class TaskCommandTemplate {
 		String wholeCommand = String.format("task create %s --definition \"%s\"", taskName,
 				actualDefinition.replaceAll("\"", "\\\\\""));
 		CommandResult cr = shell.executeCommand(wholeCommand);
-		// todo: Add launch and verifier
 
 		// add the task name to the tasks list before assertion
 		tasks.add(taskName);
@@ -130,6 +272,17 @@ public class TaskCommandTemplate {
 		// stateVerifier.waitForDestroy(task);
 		assertTrue("Failure to destroy task " + task + ".  CommandResult = " + cr.toString(), cr.isSuccess());
 		tasks.remove(task);
+	}
+
+	/**
+	 * Destroy all tasks.
+	 *
+	 */
+	public void destroyAllTasks() {
+		CommandResult cr = shell.executeCommand("task all destroy --force");
+		// stateVerifier.waitForDestroy(task);
+		assertTrue("Failure to destroy all tasks. CommandResult = " + cr.toString(), cr.isSuccess());
+		tasks.clear();
 	}
 
 	/**

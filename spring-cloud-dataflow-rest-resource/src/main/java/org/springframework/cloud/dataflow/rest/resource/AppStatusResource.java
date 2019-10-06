@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,9 +16,9 @@
 
 package org.springframework.cloud.dataflow.rest.resource;
 
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
-import org.springframework.hateoas.Resources;
+import org.springframework.hateoas.CollectionModel;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 
 /**
  * REST representation of an app status.
@@ -26,13 +26,13 @@ import org.springframework.hateoas.Resources;
  * @author Eric Bottard
  * @author Mark Fisher
  */
-public class AppStatusResource extends ResourceSupport {
+public class AppStatusResource extends RepresentationModel<AppStatusResource> {
 
 	private String deploymentId;
 
 	private String state;
 
-	private Resources<AppInstanceStatusResource> instances;
+	private CollectionModel<AppInstanceStatusResource> instances;
 
 	@SuppressWarnings("unused")
 	private AppStatusResource() {
@@ -60,15 +60,15 @@ public class AppStatusResource extends ResourceSupport {
 		this.state = state;
 	}
 
-	public Resources<AppInstanceStatusResource> getInstances() {
+	public CollectionModel<AppInstanceStatusResource> getInstances() {
 		return instances;
 	}
 
-	public void setInstances(Resources<AppInstanceStatusResource> instances) {
+	public void setInstances(CollectionModel<AppInstanceStatusResource> instances) {
 		this.instances = instances;
 	}
 
-	public static class Page extends PagedResources<AppStatusResource> {
+	public static class Page extends PagedModel<AppStatusResource> {
 
 	}
 }

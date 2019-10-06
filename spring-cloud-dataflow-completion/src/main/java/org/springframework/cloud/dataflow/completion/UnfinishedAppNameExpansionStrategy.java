@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2016 the original author or authors.
+ * Copyright 2015-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,11 +21,11 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.StreamAppDefinition;
 import org.springframework.cloud.dataflow.core.StreamDefinition;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 
 /**
  * Provides completions by finding apps whose name starts with a prefix (which was assumed
@@ -36,9 +36,9 @@ import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
  */
 public class UnfinishedAppNameExpansionStrategy implements ExpansionStrategy {
 
-	private final AppRegistryCommon appRegistry;
+	private final AppRegistryService appRegistry;
 
-	UnfinishedAppNameExpansionStrategy(AppRegistryCommon appRegistry) {
+	UnfinishedAppNameExpansionStrategy(AppRegistryService appRegistry) {
 		this.appRegistry = appRegistry;
 	}
 
@@ -59,7 +59,7 @@ public class UnfinishedAppNameExpansionStrategy implements ExpansionStrategy {
 		CompletionProposal.Factory proposals = CompletionProposal.expanding(text);
 
 		List<ApplicationType> validTypesAtThisPosition = Arrays
-				.asList(CompletionUtils.determinePotentialTypes(lastApp));
+				.asList(CompletionUtils.determinePotentialTypes(lastApp, streamDefinition.getAppDefinitions().size() > 1));
 
 		for (AppRegistration appRegistration : appRegistry.findAll()) {
 			String candidateName = appRegistration.getName();

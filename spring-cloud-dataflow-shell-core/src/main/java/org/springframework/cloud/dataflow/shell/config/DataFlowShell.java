@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -55,23 +55,17 @@ public class DataFlowShell {
 	/**
 	 * This method performs various access checks and only if {@code true} is returned,
 	 * the shell should show the associated commands. 2 checks are performed:
-	 * <p>
 	 * <ul>
 	 * <li>Does the desired operation indicated by the {@link OpsType} exist?
 	 * <li>If the operation exist, does the user have the necessary credentials?
 	 * </ul>
-	 * <p>
 	 * <b>What are valid credentials?</b>
-	 * <p>
 	 * The way the passed-in {@link RoleType}s are treated depends on the servers security
 	 * settings:
-	 * <p>
 	 * <ul>
 	 * <li>{@link Target#isAuthenticationEnabled()} Is authentication enabled?
-	 * <li>{@link Target#isAuthorizationEnabled()} If authentication is enabled, is
-	 * authorization enabled?
 	 * <li>{@link Target#isAuthenticated()} Is the user authenticated?
-	 * <li>Only if {@link Target#isAuthorizationEnabled()} and
+	 * <li>Only if
 	 * {@link Target#isAuthenticated()} is {@code true} will the {@link RoleType} checked
 	 * against {@link TargetCredentials#getRoles()}.
 	 * </ul>
@@ -85,20 +79,11 @@ public class DataFlowShell {
 		if (this.dataFlowOperations != null) {
 			boolean operationsAvailable = false;
 			switch (opsType) {
-			case AGGREGATE_COUNTER:
-				operationsAvailable = this.dataFlowOperations.aggregateCounterOperations() != null;
-				break;
 			case APP_REGISTRY:
 				operationsAvailable = this.dataFlowOperations.appRegistryOperations() != null;
 				break;
 			case COMPLETION:
 				operationsAvailable = this.dataFlowOperations.completionOperations() != null;
-				break;
-			case COUNTER:
-				operationsAvailable = this.dataFlowOperations.counterOperations() != null;
-				break;
-			case FIELD_VALUE_COUNTER:
-				operationsAvailable = this.dataFlowOperations.fieldValueCounterOperations() != null;
 				break;
 			case JOB:
 				operationsAvailable = this.dataFlowOperations.jobOperations() != null;
@@ -121,7 +106,7 @@ public class DataFlowShell {
 
 			if (target.isAuthenticationEnabled()) {
 				if (target.isAuthenticated()) {
-					if (target.isAuthorizationEnabled() && role != null) {
+					if (role != null) {
 						passesSecurityChecks = target.getTargetCredentials().getRoles().contains(role);
 					}
 					else {

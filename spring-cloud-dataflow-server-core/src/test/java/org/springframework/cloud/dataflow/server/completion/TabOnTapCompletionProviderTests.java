@@ -1,11 +1,11 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,39 +28,51 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cloud.dataflow.completion.CompletionConfiguration;
+import org.springframework.cloud.dataflow.audit.service.DefaultAuditRecordService;
 import org.springframework.cloud.dataflow.completion.CompletionProposal;
 import org.springframework.cloud.dataflow.completion.StreamCompletionProvider;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
 import org.springframework.cloud.dataflow.configuration.metadata.BootApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.StreamDefinition;
-import org.springframework.cloud.dataflow.registry.AppRegistry;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
-import org.springframework.cloud.dataflow.server.repository.InMemoryStreamDefinitionRepository;
+import org.springframework.cloud.dataflow.registry.repository.AppRegistrationRepository;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
+import org.springframework.cloud.dataflow.registry.service.DefaultAppRegistryService;
+import org.springframework.cloud.dataflow.registry.support.AppResourceCommon;
+import org.springframework.cloud.dataflow.server.configuration.TestDependencies;
 import org.springframework.cloud.dataflow.server.repository.StreamDefinitionRepository;
-import org.springframework.cloud.deployer.resource.registry.InMemoryUriRegistry;
+import org.springframework.cloud.deployer.resource.maven.MavenProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.FileSystemResourceLoader;
-import org.springframework.core.io.ResourceLoader;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.util.Assert;
 
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.is;
 import static org.junit.Assert.assertThat;
+import static org.mockito.Mockito.mock;
 
 /**
  * @author Ilayaperumal Gopinathan
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = { CompletionConfiguration.class, TabOnTapCompletionProviderTests.Mocks.class })
+@SpringBootTest(classes = TestDependencies.class)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
+@AutoConfigureTestDatabase(replace = Replace.ANY)
+@SuppressWarnings("unchecked")
 public class TabOnTapCompletionProviderTests {
 
 	@Autowired
 	private StreamCompletionProvider completionProvider;
+
+	@Autowired
+	private StreamDefinitionRepository streamDefinitionRepository;
 
 	private static org.hamcrest.Matcher<CompletionProposal> proposalThat(org.hamcrest.Matcher<String> matcher) {
 		return new FeatureMatcher<CompletionProposal, String>(matcher, "a proposal whose text", "text") {
@@ -73,10 +85,9 @@ public class TabOnTapCompletionProviderTests {
 
 	@Before
 	public void setup() {
-		StreamDefinitionRepository streamDefinitionRepository = new InMemoryStreamDefinitionRepository();
-		streamDefinitionRepository.save(new StreamDefinition("foo", "time | transform | log"));
-		streamDefinitionRepository.save(new StreamDefinition("bar", "time | log"));
-		completionProvider
+		this.streamDefinitionRepository.save(new StreamDefinition("foo", "time | transform | log"));
+		this.streamDefinitionRepository.save(new StreamDefinition("bar", "time | log"));
+		this.completionProvider
 				.addCompletionRecoveryStrategy(new TapOnDestinationRecoveryStrategy(streamDefinitionRepository));
 	}
 
@@ -112,17 +123,29 @@ public class TabOnTapCompletionProviderTests {
 
 		private static final File ROOT = new File("src/test/resources/apps");
 
-		private static final FileFilter FILTER = new FileFilter() {
-			@Override
-			public boolean accept(File pathname) {
-				return pathname.isDirectory() && pathname.getName().matches(".+-.+");
-			}
-		};
+		private static final FileFilter FILTER = pathname -> pathname.isDirectory() && pathname.getName().matches(".+-.+");
 
 		@Bean
-		public AppRegistry appRegistry() {
-			final ResourceLoader resourceLoader = new FileSystemResourceLoader();
-			return new AppRegistry(new InMemoryUriRegistry(), resourceLoader) {
+		public AppRegistryService appRegistry() {
+
+			return new DefaultAppRegistryService(mock(AppRegistrationRepository.class),
+					new AppResourceCommon(new MavenProperties(), new FileSystemResourceLoader()),
+					mock(DefaultAuditRecordService.class)) {
+
+				@Override
+				public boolean appExist(String name, ApplicationType type) {
+					return false;
+				}
+
+				@Override
+				public List<AppRegistration> findAll() {
+					List<AppRegistration> result = new ArrayList<>();
+					for (File file : ROOT.listFiles(FILTER)) {
+						result.add(makeAppRegistration(file));
+					}
+					return result;
+				}
+
 				@Override
 				public AppRegistration find(String name, ApplicationType type) {
 					String filename = name + "-" + type;
@@ -135,15 +158,6 @@ public class TabOnTapCompletionProviderTests {
 					}
 				}
 
-				@Override
-				public List<AppRegistration> findAll() {
-					List<AppRegistration> result = new ArrayList<>();
-					for (File file : ROOT.listFiles(FILTER)) {
-						result.add(makeAppRegistration(file));
-					}
-					return result;
-				}
-
 				private AppRegistration makeAppRegistration(File file) {
 					String fileName = file.getName();
 					Matcher matcher = Pattern.compile("(?<name>.+)-(?<type>.+)").matcher(fileName);
@@ -152,7 +166,18 @@ public class TabOnTapCompletionProviderTests {
 					ApplicationType type = ApplicationType.valueOf(matcher.group("type"));
 					return new AppRegistration(name, type, file.toURI());
 				}
+
+				@Override
+				public AppRegistration save(AppRegistration app) {
+					return null;
+				}
+
+				@Override
+				protected boolean isOverwrite(AppRegistration app, boolean overwrite) {
+					return false;
+				}
 			};
+
 		}
 
 		@Bean

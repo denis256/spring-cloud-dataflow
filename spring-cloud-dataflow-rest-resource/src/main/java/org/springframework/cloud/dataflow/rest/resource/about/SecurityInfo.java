@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2017 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -28,10 +28,6 @@ import java.util.List;
 public class SecurityInfo {
 
 	private boolean authenticationEnabled;
-
-	private boolean authorizationEnabled;
-
-	private boolean formLogin;
 
 	private boolean authenticated;
 
@@ -57,17 +53,6 @@ public class SecurityInfo {
 	}
 
 	/**
-	 * @return true if the authorization feature is enabled, false otherwise.
-	 */
-	public boolean isAuthorizationEnabled() {
-		return authorizationEnabled;
-	}
-
-	public void setAuthorizationEnabled(boolean authorizationEnabled) {
-		this.authorizationEnabled = authorizationEnabled;
-	}
-
-	/**
 	 * @return True if the user is authenticated
 	 */
 	public boolean isAuthenticated() {
@@ -90,8 +75,6 @@ public class SecurityInfo {
 	}
 
 	/**
-	 * Will only contain values if {@link #isAuthorizationEnabled()} is {@code true}.
-	 *
 	 * @return List of Roles, if no roles are associated, an empty collection is returned.
 	 */
 	public List<String> getRoles() {
@@ -109,20 +92,6 @@ public class SecurityInfo {
 	public SecurityInfo addRole(String role) {
 		this.roles.add(role);
 		return this;
-	}
-
-	/**
-	 * Returns {@code true} if form-login is used. In case of OAuth2 authentication,
-	 * {@code false} is returned.
-	 *
-	 * @return True if form-login is, false if OAuth2 authentication is used
-	 */
-	public boolean isFormLogin() {
-		return formLogin;
-	}
-
-	public void setFormLogin(boolean formLogin) {
-		this.formLogin = formLogin;
 	}
 
 }

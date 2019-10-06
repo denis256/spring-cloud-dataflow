@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -88,7 +88,8 @@ public class StreamDefinitionToDslConverter {
 			for (String propertyName : props.keySet()) {
 				if (!dataFlowAddedProperties.contains(propertyName)) {
 					String propertyValue = unescape(props.get(propertyName));
-					dslBuilder.append(" --").append(propertyName).append("=").append(autoQuotes(propertyValue));
+					dslBuilder.append(" --").append(propertyName).append("=").append(
+							DefinitionUtils.autoQuotes(propertyValue));
 				}
 			}
 
@@ -99,7 +100,11 @@ public class StreamDefinitionToDslConverter {
 				}
 			}
 			else {
-				dslBuilder.append(" | ");
+				if (appDefinition.getApplicationType() != ApplicationType.app) {
+					dslBuilder.append(" | ");
+				} else {
+					dslBuilder.append(" || ");
+				}
 			}
 
 			appDefinitionIndex++;
@@ -111,14 +116,6 @@ public class StreamDefinitionToDslConverter {
 		return dsl;
 	}
 
-	private String autoQuotes(String propertyValue) {
-		if (!propertyValue.contains("'")) {
-			if (propertyValue.contains(" ") || propertyValue.contains(";")  || propertyValue.contains("*")) {
-				return "'" + propertyValue + "'";
-			}
-		}
-		return propertyValue;
-	}
 
 	private String unescape(String text) {
 		return StringEscapeUtils.unescapeHtml(text);

@@ -1,11 +1,11 @@
 /*
- * Copyright 2015 the original author or authors.
+ * Copyright 2015-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,20 +16,24 @@
 package org.springframework.cloud.dataflow.rest.resource;
 
 import org.springframework.cloud.dataflow.core.TaskDefinition;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.cloud.task.repository.TaskExecution;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 
 /**
  * A HATEOAS representation of a {@link TaskDefinition}.
  *
  * @author Michael Minella
  * @author Glenn Renfro
+ * @author Gunnar Hillert
  */
-public class TaskDefinitionResource extends ResourceSupport {
+public class TaskDefinitionResource extends RepresentationModel<TaskDefinitionResource> {
 
 	private String name;
 
 	private String dslText;
+
+	private String description;
 
 	/**
 	 * Indicates whether this is a composed task.
@@ -37,9 +41,9 @@ public class TaskDefinitionResource extends ResourceSupport {
 	private boolean composed;
 
 	/**
-	 * Stream status (i.e. running, complete, etc).
+	 * The last execution of this task execution.
 	 */
-	private String status;
+	private TaskExecutionResource lastTaskExecution;
 
 	/**
 	 * Default constructor to be used by Jackson.
@@ -48,9 +52,10 @@ public class TaskDefinitionResource extends ResourceSupport {
 	protected TaskDefinitionResource() {
 	}
 
-	public TaskDefinitionResource(String name, String dslText) {
+	public TaskDefinitionResource(String name, String dslText, String description) {
 		this.name = name;
 		this.dslText = dslText;
+		this.description = description;
 	}
 
 	public String getName() {
@@ -59,6 +64,10 @@ public class TaskDefinitionResource extends ResourceSupport {
 
 	public String getDslText() {
 		return dslText;
+	}
+
+	public String getDescription() {
+		return description;
 	}
 
 	/**
@@ -80,23 +89,33 @@ public class TaskDefinitionResource extends ResourceSupport {
 	}
 
 	/**
-	 * Return the status of this task (i.e. running, complete, etc)
+	 * Return the status of this task. Returns the value of {@link TaskExecutionStatus#toString()}.
 	 *
 	 * @return task status
 	 */
 	public String getStatus() {
-		return status;
+		if (this.getLastTaskExecution() == null) {
+			return TaskExecutionStatus.UNKNOWN.toString();
+		} else {
+			return this.getLastTaskExecution().getTaskExecutionStatus().toString();
+		}
 	}
 
 	/**
-	 * Set the status of this task (i.e. running, complete, etc)
-	 *
-	 * @param status task status
+	 * @return Last {@link TaskExecution} if available, null otherwise
 	 */
-	public void setStatus(String status) {
-		this.status = status;
+	public TaskExecutionResource getLastTaskExecution() {
+		return lastTaskExecution;
 	}
 
-	public static class Page extends PagedResources<TaskDefinitionResource> {
+	/**
+	 *
+	 * @param lastTaskExecution the last Task Execution
+	 */
+	public void setLastTaskExecution(TaskExecutionResource lastTaskExecution) {
+		this.lastTaskExecution = lastTaskExecution;
+	}
+
+	public static class Page extends PagedModel<TaskDefinitionResource> {
 	}
 }

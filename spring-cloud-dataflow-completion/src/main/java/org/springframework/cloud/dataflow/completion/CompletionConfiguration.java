@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2016 the original author or authors.
+ * Copyright 2015-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,7 @@ import java.util.List;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolverAutoConfiguration;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -40,18 +40,19 @@ import org.springframework.context.annotation.Import;
 public class CompletionConfiguration {
 
 	@Autowired
-	private AppRegistryCommon appRegistry;
+	private AppRegistryService appRegistry;
 
 	@Autowired
 	private ApplicationConfigurationMetadataResolver metadataResolver;
 
 	@Bean
 	public StreamCompletionProvider streamCompletionProvider() {
-		List<RecoveryStrategy<?>> recoveryStrategies = Arrays.<RecoveryStrategy<?>>asList(
+		List<RecoveryStrategy<?>> recoveryStrategies = Arrays.asList(
 				emptyStartYieldsAppsRecoveryStrategy(), expandOneDashToTwoDashesRecoveryStrategy(),
 				configurationPropertyNameAfterDashDashRecoveryStrategy(),
 				unfinishedConfigurationPropertyNameRecoveryStrategy(), destinationNameYieldsAppsRecoveryStrategy(),
-				appsAfterPipeRecoveryStrategy(), configurationPropertyValueHintRecoveryStrategy());
+				appsAfterPipeRecoveryStrategy(), appsAfterDoublePipeRecoveryStrategy(),
+				configurationPropertyValueHintRecoveryStrategy());
 		List<ExpansionStrategy> expansionStrategies = Arrays.asList(addAppOptionsExpansionStrategy(),
 				pipeIntoOtherAppsExpansionStrategy(), unfinishedAppNameExpansionStrategy(),
 				// Make sure this one runs last, as it may clear already computed
@@ -64,7 +65,7 @@ public class CompletionConfiguration {
 
 	@Bean
 	public RecoveryStrategy<?> emptyStartYieldsAppsRecoveryStrategy() {
-		return new EmptyStartYieldsSourceAppsRecoveryStrategy(appRegistry);
+		return new EmptyStartYieldsSourceOrUnboundAppsRecoveryStrategy(appRegistry);
 	}
 
 	@Bean
@@ -85,6 +86,11 @@ public class CompletionConfiguration {
 	@Bean
 	public RecoveryStrategy<?> appsAfterPipeRecoveryStrategy() {
 		return new AppsAfterPipeRecoveryStrategy(appRegistry);
+	}
+
+	@Bean
+	public RecoveryStrategy<?> appsAfterDoublePipeRecoveryStrategy() {
+		return new AppsAfterDoublePipeRecoveryStrategy(appRegistry);
 	}
 
 	@Bean

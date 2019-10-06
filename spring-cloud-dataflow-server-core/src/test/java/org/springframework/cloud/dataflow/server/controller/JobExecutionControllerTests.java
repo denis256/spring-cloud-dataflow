@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2018 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,7 +16,6 @@
 
 package org.springframework.cloud.dataflow.server.controller;
 
-import java.util.ArrayList;
 import java.util.Date;
 
 import org.junit.Assert;
@@ -32,20 +31,21 @@ import org.springframework.batch.core.repository.JobRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.batch.BatchProperties;
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.EmbeddedDataSourceConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.dataflow.server.config.apps.CommonApplicationProperties;
 import org.springframework.cloud.dataflow.server.configuration.JobDependencies;
 import org.springframework.cloud.task.batch.listener.TaskBatchDao;
-import org.springframework.cloud.task.repository.TaskExecution;
 import org.springframework.cloud.task.repository.dao.TaskExecutionDao;
 import org.springframework.http.MediaType;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.junit4.SpringRunner;
 import org.springframework.test.web.servlet.MockMvc;
-import org.springframework.test.web.servlet.setup.MockMvcBuilders;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandlerAdapter;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.hasSize;
@@ -61,27 +61,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author Gunnar Hillert
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = { EmbeddedDataSourceConfiguration.class, JobDependencies.class,
+@SpringBootTest(classes = { JobDependencies.class,
 		PropertyPlaceholderAutoConfiguration.class, BatchProperties.class })
 @EnableConfigurationProperties({ CommonApplicationProperties.class })
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
+@AutoConfigureTestDatabase(replace = Replace.ANY)
 public class JobExecutionControllerTests {
-
-	private final static String BASE_JOB_NAME = "myJob";
-
-	private final static String JOB_NAME_ORIG = BASE_JOB_NAME + "_ORIG";
-
-	private final static String JOB_NAME_FOO = BASE_JOB_NAME + "_FOO";
-
-	private final static String JOB_NAME_COMPLETED = BASE_JOB_NAME + "_FOO_COMPLETED";
-
-	private final static String JOB_NAME_STOPPED = BASE_JOB_NAME + "_FOO_STOPPED";
-
-	private final static String JOB_NAME_STARTED = BASE_JOB_NAME + "_FOO_STARTED";
-
-	private final static String JOB_NAME_FOOBAR = BASE_JOB_NAME + "_FOOBAR";
-
-	private final static String JOB_NAME_NO_TASK = BASE_JOB_NAME + "_NO_TASK";
 
 	@Autowired
 	private TaskExecutionDao dao;
@@ -97,16 +82,13 @@ public class JobExecutionControllerTests {
 	@Autowired
 	private WebApplicationContext wac;
 
+	@Autowired
+	private RequestMappingHandlerAdapter adapter;
+
 	@Before
 	public void setupMockMVC() {
-		this.mockMvc = MockMvcBuilders.webAppContextSetup(wac)
-				.defaultRequest(get("/").accept(MediaType.APPLICATION_JSON)).build();
-		createSampleJob(JOB_NAME_ORIG, 1);
-		createSampleJob(JOB_NAME_FOO, 1);
-		createSampleJob(JOB_NAME_FOOBAR, 2);
-		createSampleJob(JOB_NAME_COMPLETED, 1, BatchStatus.COMPLETED);
-		createSampleJob(JOB_NAME_STARTED, 1, BatchStatus.STARTED);
-		createSampleJob(JOB_NAME_STOPPED, 1, BatchStatus.STOPPED);
+		this.mockMvc = JobExecutionUtils.createBaseJobExecutionMockMvc(jobRepository, taskBatchDao,
+				dao, wac, adapter);
 	}
 
 	@Test(expected = IllegalArgumentException.class)
@@ -150,7 +132,7 @@ public class JobExecutionControllerTests {
 		mockMvc.perform(put("/jobs/executions/6").accept(MediaType.APPLICATION_JSON).param("stop", "true"))
 				.andExpect(status().isOk());
 
-		final JobExecution jobExecution = jobRepository.getLastJobExecution(JOB_NAME_STARTED, new JobParameters());
+		final JobExecution jobExecution = jobRepository.getLastJobExecution(JobExecutionUtils.JOB_NAME_STARTED, new JobParameters());
 		Assert.assertNotNull(jobExecution);
 		Assert.assertEquals(Long.valueOf(6), jobExecution.getId());
 		Assert.assertEquals(BatchStatus.STOPPING, jobExecution.getStatus());
@@ -164,7 +146,7 @@ public class JobExecutionControllerTests {
 		mockMvc.perform(put("/jobs/executions/7").accept(MediaType.APPLICATION_JSON).param("stop", "true"))
 				.andExpect(status().isUnprocessableEntity());
 
-		final JobExecution jobExecution = jobRepository.getLastJobExecution(JOB_NAME_STOPPED, new JobParameters());
+		final JobExecution jobExecution = jobRepository.getLastJobExecution(JobExecutionUtils.JOB_NAME_STOPPED, new JobParameters());
 		Assert.assertNotNull(jobExecution);
 		Assert.assertEquals(Long.valueOf(7), jobExecution.getId());
 		Assert.assertEquals(BatchStatus.STOPPED, jobExecution.getStatus());
@@ -179,7 +161,7 @@ public class JobExecutionControllerTests {
 
 	@Test
 	public void testGetAllExecutionsFailed() throws Exception {
-		createDirtyJob(JOB_NAME_NO_TASK, BatchStatus.STOPPED);
+		createDirtyJob();
 
 		mockMvc.perform(get("/jobs/executions/").accept(MediaType.APPLICATION_JSON))
 				.andExpect(status().isNotFound());
@@ -193,21 +175,34 @@ public class JobExecutionControllerTests {
 	}
 
 	@Test
+	public void testGetAllExecutionsPageOffsetLargerThanIntMaxValue() throws Exception {
+		verify5XXErrorIsThrownForPageOffsetError(get("/jobs/executions/"));
+		verifyBorderCaseForMaxInt(get("/jobs/executions/"));
+	}
+
+	@Test
 	public void testGetExecutionsByName() throws Exception {
-		mockMvc.perform(get("/jobs/executions/").param("name", JOB_NAME_ORIG).accept(MediaType.APPLICATION_JSON))
+		mockMvc.perform(get("/jobs/executions/").param("name", JobExecutionUtils.JOB_NAME_ORIG).accept(MediaType.APPLICATION_JSON))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.content[0].jobExecution.jobInstance.jobName", is(JOB_NAME_ORIG)))
+				.andExpect(jsonPath("$.content[0].jobExecution.jobInstance.jobName", is(JobExecutionUtils.JOB_NAME_ORIG)))
 				.andExpect(jsonPath("$.content", hasSize(1)));
 	}
 
 	@Test
+	public void testGetExecutionsByNamePageOffsetLargerThanIntMaxValue() throws Exception {
+		verify5XXErrorIsThrownForPageOffsetError(get("/jobs/executions/").param("name", JobExecutionUtils.JOB_NAME_ORIG));
+		verifyBorderCaseForMaxInt(get("/jobs/executions/").param("name", JobExecutionUtils.JOB_NAME_ORIG));
+	}
+
+	@Test
 	public void testGetExecutionsByNameMultipleResult() throws Exception {
-		mockMvc.perform(get("/jobs/executions/").param("name", JOB_NAME_FOOBAR).accept(MediaType.APPLICATION_JSON))
+		mockMvc.perform(get("/jobs/executions/").param("name", JobExecutionUtils.JOB_NAME_FOOBAR).accept(MediaType.APPLICATION_JSON))
 				.andExpect(status().isOk())
-				.andExpect(jsonPath("$.content[0].jobExecution.jobInstance.jobName", is(JOB_NAME_FOOBAR)))
-				.andExpect(jsonPath("$.content[1].jobExecution.jobInstance.jobName", is(JOB_NAME_FOOBAR)))
+				.andExpect(jsonPath("$.content[0].jobExecution.jobInstance.jobName", is(JobExecutionUtils.JOB_NAME_FOOBAR)))
+				.andExpect(jsonPath("$.content[1].jobExecution.jobInstance.jobName", is(JobExecutionUtils.JOB_NAME_FOOBAR)))
 				.andExpect(jsonPath("$.content", hasSize(2)));
 	}
+
 
 	@Test
 	public void testGetExecutionsByNameNotFound() throws Exception {
@@ -215,34 +210,44 @@ public class JobExecutionControllerTests {
 				.andExpect(status().isNotFound());
 	}
 
-	private void createSampleJob(String jobName, int jobExecutionCount, BatchStatus status) {
-		JobInstance instance = jobRepository.createJobInstance(jobName, new JobParameters());
-		TaskExecution taskExecution = dao.createTaskExecution(jobName, new Date(), new ArrayList<String>(), null);
-		JobExecution jobExecution = null;
-
-		for (int i = 0; i < jobExecutionCount; i++) {
-			jobExecution = jobRepository.createJobExecution(instance, new JobParameters(), null);
-			taskBatchDao.saveRelationship(taskExecution, jobExecution);
-			jobExecution.setStatus(status);
-			if (BatchStatus.STOPPED.equals(status)) {
-				jobExecution.setEndTime(new Date());
-			}
-			jobRepository.update(jobExecution);
-		}
+	@Test
+	public void testWildcardMatchMultipleResult() throws Exception {
+		mockMvc.perform(get("/jobs/executions/")
+				.param("name", JobExecutionUtils.BASE_JOB_NAME + "_FOO_ST%").accept(MediaType.APPLICATION_JSON))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].jobExecution.jobInstance.jobName", is(JobExecutionUtils.JOB_NAME_STOPPED)))
+				.andExpect(jsonPath("$.content[1].jobExecution.jobInstance.jobName", is(JobExecutionUtils.JOB_NAME_STARTED)))
+				.andExpect(jsonPath("$.content", hasSize(2)));
 	}
 
-	private void createDirtyJob(String jobName, BatchStatus status) {
-		JobInstance instance = jobRepository.createJobInstance(jobName, new JobParameters());
+	@Test
+	public void testWildcardMatchSingleResult() throws Exception {
+		mockMvc.perform(get("/jobs/executions/")
+				.param("name", "m_Job_ORIG").accept(MediaType.APPLICATION_JSON))
+				.andExpect(status().isOk())
+				.andExpect(jsonPath("$.content[0].jobExecution.jobInstance.jobName", is(JobExecutionUtils.JOB_NAME_ORIG)))
+				.andExpect(jsonPath("$.content", hasSize(1)));
+	}
+
+	private void createDirtyJob() {
+		JobInstance instance = jobRepository.createJobInstance(JobExecutionUtils.BASE_JOB_NAME + "_NO_TASK", new JobParameters());
 		JobExecution jobExecution = jobRepository.createJobExecution(
 				instance, new JobParameters(), null);
-		jobExecution.setStatus(status);
-		if (BatchStatus.STOPPED.equals(status)) {
-			jobExecution.setEndTime(new Date());
-		}
+		jobExecution.setStatus(BatchStatus.STOPPED);
+		jobExecution.setEndTime(new Date());
 		jobRepository.update(jobExecution);
 	}
 
-	private void createSampleJob(String jobName, int jobExecutionCount) {
-		createSampleJob(jobName, jobExecutionCount, BatchStatus.UNKNOWN);
+	private void verify5XXErrorIsThrownForPageOffsetError(MockHttpServletRequestBuilder builder) throws Exception{
+		mockMvc.perform(builder.param("page", String.valueOf(Integer.MAX_VALUE))
+				.accept(MediaType.APPLICATION_JSON))
+				.andExpect(status().is4xxClientError())
+				.andReturn().getResponse().getContentAsString()
+				.contains("OffsetOutOfBoundsException");
+	}
+	private void verifyBorderCaseForMaxInt(MockHttpServletRequestBuilder builder) throws Exception {
+		mockMvc.perform(builder.param("page", String.valueOf(Integer.MAX_VALUE - 1 ))
+				.param("size", "1")
+				.accept(MediaType.APPLICATION_JSON)).andExpect(status().isOk());
 	}
 }

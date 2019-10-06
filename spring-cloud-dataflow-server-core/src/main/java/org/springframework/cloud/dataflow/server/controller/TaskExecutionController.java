@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2017 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,27 +17,36 @@
 package org.springframework.cloud.dataflow.server.controller;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
+import org.springframework.cloud.dataflow.core.PlatformTaskExecutionInformation;
 import org.springframework.cloud.dataflow.rest.job.TaskJobExecutionRel;
+import org.springframework.cloud.dataflow.rest.resource.CurrentTaskExecutionsResource;
 import org.springframework.cloud.dataflow.rest.resource.TaskExecutionResource;
+import org.springframework.cloud.dataflow.rest.util.ArgumentSanitizer;
 import org.springframework.cloud.dataflow.rest.util.DeploymentPropertiesUtils;
-import org.springframework.cloud.dataflow.server.controller.support.ArgumentSanitizer;
+import org.springframework.cloud.dataflow.server.controller.support.TaskExecutionControllerDeleteAction;
 import org.springframework.cloud.dataflow.server.repository.NoSuchTaskDefinitionException;
 import org.springframework.cloud.dataflow.server.repository.NoSuchTaskExecutionException;
 import org.springframework.cloud.dataflow.server.repository.TaskDefinitionRepository;
-import org.springframework.cloud.dataflow.server.service.TaskService;
+import org.springframework.cloud.dataflow.server.service.TaskDeleteService;
+import org.springframework.cloud.dataflow.server.service.TaskExecutionInfoService;
+import org.springframework.cloud.dataflow.server.service.TaskExecutionService;
 import org.springframework.cloud.task.repository.TaskExecution;
 import org.springframework.cloud.task.repository.TaskExplorer;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedResourcesAssembler;
-import org.springframework.hateoas.ExposesResourceFor;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.mvc.ResourceAssemblerSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.server.ExposesResourceFor;
+import org.springframework.hateoas.server.mvc.RepresentationModelAssemblerSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -55,6 +64,9 @@ import org.springframework.web.bind.annotation.RestController;
  * @author Glenn Renfro
  * @author Michael Minella
  * @author Ilayaperumal Gopinathan
+ * @author Christian Tzolov
+ * @author David Turanski
+ * @author Gunnar Hillert
  */
 @RestController
 @RequestMapping("/tasks/executions")
@@ -63,7 +75,11 @@ public class TaskExecutionController {
 
 	private final Assembler taskAssembler = new Assembler();
 
-	private final TaskService taskService;
+	private final TaskExecutionService taskExecutionService;
+
+	private final TaskExecutionInfoService taskExecutionInfoService;
+
+	private final TaskDeleteService taskDeleteService;
 
 	private final TaskExplorer explorer;
 
@@ -76,18 +92,25 @@ public class TaskExecutionController {
 	 * from a the {@link TaskExplorer}
 	 *
 	 * @param explorer the explorer this controller will use for retrieving task execution
-	 * information.
-	 * @param taskService used to launch tasks
+	 *     information.
+	 * @param taskExecutionService used to launch tasks
 	 * @param taskDefinitionRepository the task definition repository
+	 * @param taskExecutionInfoService the task execution information service
+	 * @param taskDeleteService the task deletion service
 	 */
-	public TaskExecutionController(TaskExplorer explorer, TaskService taskService,
-			TaskDefinitionRepository taskDefinitionRepository) {
+	public TaskExecutionController(TaskExplorer explorer, TaskExecutionService taskExecutionService,
+			TaskDefinitionRepository taskDefinitionRepository, TaskExecutionInfoService taskExecutionInfoService,
+			TaskDeleteService taskDeleteService) {
 		Assert.notNull(explorer, "explorer must not be null");
-		Assert.notNull(taskService, "taskService must not be null");
+		Assert.notNull(taskExecutionService, "taskExecutionService must not be null");
 		Assert.notNull(taskDefinitionRepository, "taskDefinitionRepository must not be null");
-		this.taskService = taskService;
+		Assert.notNull(taskExecutionInfoService, "taskDefinitionRetriever must not be null");
+		Assert.notNull(taskDeleteService, "taskDeleteService must not be null");
+		this.taskExecutionService = taskExecutionService;
 		this.explorer = explorer;
 		this.taskDefinitionRepository = taskDefinitionRepository;
+		this.taskExecutionInfoService = taskExecutionInfoService;
+		this.taskDeleteService = taskDeleteService;
 	}
 
 	/**
@@ -99,11 +122,11 @@ public class TaskExecutionController {
 	 */
 	@RequestMapping(value = "", method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<TaskExecutionResource> list(Pageable pageable,
+	public PagedModel<TaskExecutionResource> list(Pageable pageable,
 			PagedResourcesAssembler<TaskJobExecutionRel> assembler) {
 		Page<TaskExecution> taskExecutions = this.explorer.findAll(pageable);
 		Page<TaskJobExecutionRel> result = getPageableRelationships(taskExecutions, pageable);
-		return assembler.toResource(result, this.taskAssembler);
+		return assembler.toModel(result, this.taskAssembler);
 	}
 
 	/**
@@ -116,34 +139,35 @@ public class TaskExecutionController {
 	 */
 	@RequestMapping(value = "", method = RequestMethod.GET, params = "name")
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<TaskExecutionResource> retrieveTasksByName(@RequestParam("name") String taskName,
+	public PagedModel<TaskExecutionResource> retrieveTasksByName(@RequestParam("name") String taskName,
 			Pageable pageable, PagedResourcesAssembler<TaskJobExecutionRel> assembler) {
-		if (this.taskDefinitionRepository.findOne(taskName) == null) {
-			throw new NoSuchTaskDefinitionException(taskName);
-		}
+		this.taskDefinitionRepository.findById(taskName)
+				.orElseThrow(() -> new NoSuchTaskDefinitionException(taskName));
 		Page<TaskExecution> taskExecutions = this.explorer.findTaskExecutionsByName(taskName, pageable);
 		Page<TaskJobExecutionRel> result = getPageableRelationships(taskExecutions, pageable);
-		return assembler.toResource(result, this.taskAssembler);
+		return assembler.toModel(result, this.taskAssembler);
 	}
 
 	/**
-	 * Request the launching of an existing task definition. The name must be included in
-	 * the path.
+	 * Request the launching of an existing task definition. The name must be included in the
+	 * path.
 	 *
 	 * @param taskName the name of the existing task to be executed (required)
+	 * @param ctrname user specified name of a ctr app if different than the default.
 	 * @param properties the runtime properties for the task, as a comma-delimited list of
-	 * key=value pairs
+	 *     key=value pairs
 	 * @param arguments the runtime commandline arguments
 	 * @return the taskExecutionId for the executed task
 	 */
 	@RequestMapping(value = "", method = RequestMethod.POST, params = "name")
 	@ResponseStatus(HttpStatus.CREATED)
-	public long launch(@RequestParam("name") String taskName, @RequestParam(required = false) String properties,
-			@RequestParam(required = false) List<String> arguments) {
+	public long launch(@RequestParam("name") String taskName,
+			@RequestParam(required = false) String ctrname,
+			@RequestParam(required = false) String properties,
+			@RequestParam(required = false) String arguments) {
 		Map<String, String> propertiesToUse = DeploymentPropertiesUtils.parse(properties);
-		DeploymentPropertiesUtils.validateDeploymentProperties(propertiesToUse);
-		return this.taskService.executeTask(taskName, propertiesToUse,
-				DeploymentPropertiesUtils.parseParams(arguments));
+		List<String> argumentsToUse = DeploymentPropertiesUtils.parseParamList(arguments, " ");
+		return this.taskExecutionService.executeTask(taskName, propertiesToUse, argumentsToUse, ctrname);
 	}
 
 	/**
@@ -162,22 +186,54 @@ public class TaskExecutionController {
 		taskExecution = sanitizePotentialSensitiveKeys(taskExecution);
 		TaskJobExecutionRel taskJobExecutionRel = new TaskJobExecutionRel(taskExecution,
 				new ArrayList<>(this.explorer.getJobExecutionIdsByTaskExecutionId(taskExecution.getExecutionId())));
-		return this.taskAssembler.toResource(taskJobExecutionRel);
+		return this.taskAssembler.toModel(taskJobExecutionRel);
+	}
+
+	@RequestMapping(value = "/current", method = RequestMethod.GET)
+	@ResponseStatus(HttpStatus.OK)
+	public Collection<CurrentTaskExecutionsResource> getCurrentTaskExecutionsInfo() {
+		List<PlatformTaskExecutionInformation> executionInformation = taskExecutionInfoService
+				.findAllPlatformTaskExecutionInformation().getTaskExecutionInformation();
+		List<CurrentTaskExecutionsResource> resources = new ArrayList<>();
+
+		executionInformation.forEach(platformTaskExecutionInformation -> {
+			CurrentTaskExecutionsResource currentTaskExecutionsResource =
+			CurrentTaskExecutionsResource.fromTaskExecutionInformation(platformTaskExecutionInformation);
+			resources.add(currentTaskExecutionsResource);
+		});
+
+		return resources;
 	}
 
 	/**
-	 * Cleanup resources associated with a single task execution, specified by id.
+	 * Cleanup resources associated with one or more task executions, specified by id(s). The
+	 * optional {@code actions} parameter can be used to not only clean up task execution resources,
+	 * but can also trigger the deletion of task execution and job data in the persistence store.
 	 *
-	 * @param id the id of the {@link TaskExecution} to clean up
+	 * @param ids The id of the {@link TaskExecution}s to clean up
+	 * @param actions Defaults to "CLEANUP" if not specified
 	 */
 	@RequestMapping(value = "/{id}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
-	public void cleanup(@PathVariable("id") long id) {
-		TaskExecution taskExecution = this.explorer.getTaskExecution(id);
-		if (taskExecution == null) {
-			throw new NoSuchTaskExecutionException(id);
-		}
-		this.taskService.cleanupExecution(id);
+	public void cleanup(
+			@PathVariable("id") Set<Long> ids,
+			@RequestParam(defaultValue = "CLEANUP", name="action") TaskExecutionControllerDeleteAction[] actions) {
+
+		final Set<TaskExecutionControllerDeleteAction> actionsAsSet = new HashSet<>(Arrays.asList(actions));
+
+		this.taskDeleteService.cleanupExecutions(actionsAsSet, ids);
+	}
+
+	/**
+	 * Stop a set of task executions.
+	 *
+	 * @param ids the ids of the {@link TaskExecution}s to stop
+	 */
+	@RequestMapping(value = "/{id}", method = RequestMethod.POST)
+	@ResponseStatus(HttpStatus.OK)
+	public void stop(@PathVariable("id") Set<Long> ids,
+	@RequestParam(defaultValue = "", name="platform") String platform) {
+		this.taskExecutionService.stopTaskExecution(ids, platform);
 	}
 
 	private Page<TaskJobExecutionRel> getPageableRelationships(Page<TaskExecution> taskExecutions, Pageable pageable) {
@@ -198,22 +254,22 @@ public class TaskExecutionController {
 	}
 
 	/**
-	 * {@link org.springframework.hateoas.ResourceAssembler} implementation that converts
+	 * {@link org.springframework.hateoas.server.ResourceAssembler} implementation that converts
 	 * {@link TaskJobExecutionRel}s to {@link TaskExecutionResource}s.
 	 */
-	private static class Assembler extends ResourceAssemblerSupport<TaskJobExecutionRel, TaskExecutionResource> {
+	private static class Assembler extends RepresentationModelAssemblerSupport<TaskJobExecutionRel, TaskExecutionResource> {
 
 		public Assembler() {
 			super(TaskExecutionController.class, TaskExecutionResource.class);
 		}
 
 		@Override
-		public TaskExecutionResource toResource(TaskJobExecutionRel taskJobExecutionRel) {
-			return createResourceWithId(taskJobExecutionRel.getTaskExecution().getExecutionId(), taskJobExecutionRel);
+		public TaskExecutionResource toModel(TaskJobExecutionRel taskJobExecutionRel) {
+			return createModelWithId(taskJobExecutionRel.getTaskExecution().getExecutionId(), taskJobExecutionRel);
 		}
 
 		@Override
-		public TaskExecutionResource instantiateResource(TaskJobExecutionRel taskJobExecutionRel) {
+		public TaskExecutionResource instantiateModel(TaskJobExecutionRel taskJobExecutionRel) {
 			return new TaskExecutionResource(taskJobExecutionRel);
 		}
 	}

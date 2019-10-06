@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -38,7 +38,9 @@ public class DataFlowClientAutoConfigurationTests {
 
 	@Test
 	public void contextLoads() throws Exception {
-		ConfigurableApplicationContext applicationContext = SpringApplication.run(TestApplication.class, "--spring.cloud.dataflow.client.enableDsl=true");
+		ConfigurableApplicationContext applicationContext = SpringApplication.run(TestApplication.class,
+				"--spring.cloud.dataflow.client.enableDsl=true",
+				"--spring.autoconfigure.exclude=org.springframework.cloud.deployer.spi.cloudfoundry.CloudFoundryDeployerAutoConfiguration,org.springframework.cloud.deployer.spi.kubernetes.KubernetesAutoConfiguration");
 		Assert.assertNotNull(applicationContext.getBean(DataFlowTemplate.class));
 		Assert.assertNotNull(applicationContext.getBean(StreamBuilder.class));
 		RestTemplate template = applicationContext.getBean(RestTemplate.class);
@@ -50,7 +52,9 @@ public class DataFlowClientAutoConfigurationTests {
 	@Test
 	public void usingAuthentication() throws Exception {
 		ConfigurableApplicationContext applicationContext = SpringApplication.run(TestApplication.class,
-				"--spring.cloud.dataflow.client.authentication.basic.username=foo", "--spring.cloud.dataflow.client.authentication.basic.password=bar");
+				"--spring.cloud.dataflow.client.authentication.basic.username=foo",
+				"--spring.cloud.dataflow.client.authentication.basic.password=bar",
+				"--spring.autoconfigure.exclude=org.springframework.cloud.deployer.spi.cloudfoundry.CloudFoundryDeployerAutoConfiguration,org.springframework.cloud.deployer.spi.kubernetes.KubernetesAutoConfiguration");
 		Assert.assertNotNull(applicationContext.getBean(DataFlowTemplate.class));
 		Assert.assertNotNull(applicationContext.getBean(StreamBuilder.class));
 

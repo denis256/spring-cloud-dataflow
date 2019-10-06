@@ -1,11 +1,11 @@
 /*
- * Copyright 2017-2018 the original author or authors.
+ * Copyright 2017-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -25,7 +25,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ForkJoinPool;
 import java.util.stream.Collectors;
 
@@ -35,21 +34,22 @@ import com.fasterxml.jackson.databind.DeserializationFeature;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleAbstractTypeResolver;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 import org.json.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.DumperOptions;
 import org.yaml.snakeyaml.Yaml;
 
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.DataFlowPropertyKeys;
+import org.springframework.cloud.dataflow.core.StreamAppDefinition;
 import org.springframework.cloud.dataflow.core.StreamDefinition;
 import org.springframework.cloud.dataflow.core.StreamDeployment;
 import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
-import org.springframework.cloud.dataflow.registry.support.ResourceUtils;
 import org.springframework.cloud.dataflow.rest.SkipperStream;
 import org.springframework.cloud.dataflow.server.controller.NoSuchAppException;
-import org.springframework.cloud.dataflow.server.controller.StreamDefinitionController;
+import org.springframework.cloud.dataflow.server.controller.support.InvalidStreamDefinitionException;
+import org.springframework.cloud.dataflow.server.repository.NoSuchStreamDefinitionException;
 import org.springframework.cloud.dataflow.server.repository.StreamDefinitionRepository;
 import org.springframework.cloud.deployer.spi.app.AppInstanceStatus;
 import org.springframework.cloud.deployer.spi.app.AppStatus;
@@ -57,6 +57,7 @@ import org.springframework.cloud.deployer.spi.app.DeploymentState;
 import org.springframework.cloud.deployer.spi.core.AppDeploymentRequest;
 import org.springframework.cloud.deployer.spi.core.RuntimeEnvironmentInfo;
 import org.springframework.cloud.skipper.ReleaseNotFoundException;
+import org.springframework.cloud.skipper.SkipperException;
 import org.springframework.cloud.skipper.client.SkipperClient;
 import org.springframework.cloud.skipper.domain.AboutResource;
 import org.springframework.cloud.skipper.domain.ConfigValues;
@@ -64,10 +65,12 @@ import org.springframework.cloud.skipper.domain.Deployer;
 import org.springframework.cloud.skipper.domain.Info;
 import org.springframework.cloud.skipper.domain.InstallProperties;
 import org.springframework.cloud.skipper.domain.InstallRequest;
+import org.springframework.cloud.skipper.domain.LogInfo;
 import org.springframework.cloud.skipper.domain.Package;
 import org.springframework.cloud.skipper.domain.PackageIdentifier;
 import org.springframework.cloud.skipper.domain.PackageMetadata;
 import org.springframework.cloud.skipper.domain.Release;
+import org.springframework.cloud.skipper.domain.RollbackRequest;
 import org.springframework.cloud.skipper.domain.SpringCloudDeployerApplicationManifest;
 import org.springframework.cloud.skipper.domain.SpringCloudDeployerApplicationManifestReader;
 import org.springframework.cloud.skipper.domain.SpringCloudDeployerApplicationSpec;
@@ -80,7 +83,7 @@ import org.springframework.cloud.skipper.io.PackageWriter;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.Pageable;
-import org.springframework.hateoas.Resources;
+import org.springframework.hateoas.CollectionModel;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
@@ -95,7 +98,10 @@ import org.springframework.util.StringUtils;
  */
 public class SkipperStreamDeployer implements StreamDeployer {
 
-	private static Log logger = LogFactory.getLog(SkipperStreamDeployer.class);
+	private static final Logger logger = LoggerFactory.getLogger(SkipperStreamDeployer.class);
+
+	//Assume version suffix added by skipper is 5 chars.
+	private static final int MAX_APPNAME_LENGTH = 63-5;
 
 	private final SkipperClient skipperClient;
 
@@ -119,21 +125,25 @@ public class SkipperStreamDeployer implements StreamDeployer {
 
 	public static List<AppStatus> deserializeAppStatus(String platformStatus) {
 		try {
-			ObjectMapper mapper = new ObjectMapper();
-			mapper.addMixIn(AppStatus.class, AppStatusMixin.class);
-			mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-			SimpleModule module = new SimpleModule("CustomModel", Version.unknownVersion());
-			SimpleAbstractTypeResolver resolver = new SimpleAbstractTypeResolver();
-			resolver.addMapping(AppInstanceStatus.class, AppInstanceStatusImpl.class);
-			module.setAbstractTypes(resolver);
-			mapper.registerModule(module);
-			TypeReference<List<AppStatus>> typeRef = new TypeReference<List<AppStatus>>() {
-			};
-			List<AppStatus> result = mapper.readValue(platformStatus, typeRef);
-			return result;
+			if (platformStatus != null) {
+				ObjectMapper mapper = new ObjectMapper();
+				mapper.addMixIn(AppStatus.class, AppStatusMixin.class);
+				mapper.configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
+				SimpleModule module = new SimpleModule("CustomModel", Version.unknownVersion());
+				SimpleAbstractTypeResolver resolver = new SimpleAbstractTypeResolver();
+				resolver.addMapping(AppInstanceStatus.class, AppInstanceStatusImpl.class);
+				module.setAbstractTypes(resolver);
+				mapper.registerModule(module);
+				TypeReference<List<AppStatus>> typeRef = new TypeReference<List<AppStatus>>() {
+				};
+				return mapper.readValue(platformStatus, typeRef);
+			}
+			return new ArrayList<AppStatus>();
 		}
 		catch (Exception e) {
-			throw new IllegalArgumentException("Could not parse Skipper Platform Status JSON:" + platformStatus, e);
+			logger.error("Could not parse Skipper Platform Status JSON [" + platformStatus + "]. " +
+					"Exception message = " + e.getMessage());
+			return new ArrayList<AppStatus>();
 		}
 	}
 
@@ -158,10 +168,13 @@ public class SkipperStreamDeployer implements StreamDeployer {
 		DeploymentState state = null;
 		try {
 			Info info = this.skipperClient.status(streamName);
+			if (info.getStatus().getPlatformStatus() == null) {
+				return getDeploymentStateFromStatusInfo(info);
+			}
 			List<AppStatus> appStatusList = deserializeAppStatus(info.getStatus().getPlatformStatus());
 			Set<DeploymentState> deploymentStateList = appStatusList.stream().map(appStatus -> appStatus.getState())
 					.collect(Collectors.toSet());
-			DeploymentState aggregateState = StreamDefinitionController.aggregateState(deploymentStateList);
+			DeploymentState aggregateState = StreamDeployerUtil.aggregateState(deploymentStateList);
 			state = aggregateState;
 		}
 		catch (ReleaseNotFoundException e) {
@@ -173,12 +186,30 @@ public class SkipperStreamDeployer implements StreamDeployer {
 		return state;
 	}
 
+	private DeploymentState getDeploymentStateFromStatusInfo(Info info) {
+		DeploymentState result = DeploymentState.unknown;
+		switch (info.getStatus().getStatusCode()) {
+		case FAILED:
+			result = DeploymentState.failed;
+			break;
+		case DELETED:
+			result = DeploymentState.undeployed;
+			break;
+		case UNKNOWN:
+			result = DeploymentState.unknown;
+			break;
+		case DEPLOYED:
+			result = DeploymentState.deployed;
+		}
+		return result;
+	}
+
 	private boolean streamDefinitionExists(String streamName) {
-		return this.streamDefinitionRepository.findOne(streamName) != null;
+		return this.streamDefinitionRepository.findById(streamName).isPresent();
 	}
 
 	public Release deployStream(StreamDeploymentRequest streamDeploymentRequest) {
-		validateAllAppsRegistered(streamDeploymentRequest);
+		validateStreamDeploymentRequest(streamDeploymentRequest);
 		Map<String, String> streamDeployerProperties = streamDeploymentRequest.getStreamDeployerProperties();
 		String packageVersion = streamDeployerProperties.get(SkipperStream.SKIPPER_PACKAGE_VERSION);
 		Assert.isTrue(StringUtils.hasText(packageVersion), "Package Version must be set");
@@ -217,13 +248,26 @@ public class SkipperStreamDeployer implements StreamDeployer {
 		installProperties.setReleaseName(streamName);
 		installProperties.setConfigValues(new ConfigValues());
 		installRequest.setInstallProperties(installProperties);
-		Release release = skipperClient.install(installRequest);
+		Release release = null;
+		try {
+			release = this.skipperClient.install(installRequest);
+		}
+		catch (Exception e) {
+			logger.error("Skipper install failed. Deleting the package: " + packageName);
+			try {
+				this.skipperClient.packageDelete(packageName);
+			}
+			catch (Exception e1) {
+				logger.error("Package delete threw exception: " + e1.getMessage());
+			}
+			throw new SkipperException(e.getMessage());
+		}
 		// TODO store releasename in deploymentIdRepository...
 		return release;
 	}
 
 	private String determinePlatformName(final String platformName) {
-		Resources<Deployer> deployerResources = skipperClient.listDeployers();
+		CollectionModel<Deployer> deployerResources = skipperClient.listDeployers();
 		Collection<Deployer> deployers = deployerResources.getContent();
 		if (StringUtils.hasText(platformName)) {
 			List<Deployer> filteredDeployers = deployers.stream()
@@ -248,21 +292,56 @@ public class SkipperStreamDeployer implements StreamDeployer {
 		}
 	}
 
-	private void validateAllAppsRegistered(StreamDeploymentRequest streamDeploymentRequest) {
+	private void validateStreamDeploymentRequest(StreamDeploymentRequest streamDeploymentRequest) {
+		if (streamDeploymentRequest.getAppDeploymentRequests() == null
+				|| streamDeploymentRequest.getAppDeploymentRequests().isEmpty()) {
+			// nothing to validate.
+			return;
+		}
+		String streamName = streamDeploymentRequest.getStreamName();
+		// throw as at this point we should have definition
+		StreamDefinition streamDefinition = this.streamDefinitionRepository
+				.findById(streamName)
+				.orElseThrow(() -> new NoSuchStreamDefinitionException(streamDeploymentRequest.getStreamName()));
+
 		for (AppDeploymentRequest adr : streamDeploymentRequest.getAppDeploymentRequests()) {
-			String version = ResourceUtils.getResourceVersion(adr.getResource());
-			validateAppVersionIsRegistered(adr, version);
+			String registeredAppName = getRegisteredName(streamDefinition, adr.getDefinition().getName());
+			String appName =  String.format("%s-%s-v", streamName, registeredAppName);
+			if (appName.length() > 40) {
+				logger.warn("The stream name plus application name [" + appName + "] is longer than 40 characters." +
+						"  This can not exceed " + MAX_APPNAME_LENGTH + " in length.");
+			}
+			if (appName.length() > MAX_APPNAME_LENGTH) {
+				throw new InvalidStreamDefinitionException(
+						String.format("The runtime application name for the app %s in the stream %s "
+						+ "should not exceed %s in length. The runtime application name is: %s", registeredAppName, streamName, MAX_APPNAME_LENGTH, appName));
+			}
+			String version = this.appRegistryService.getResourceVersion(adr.getResource());
+			validateAppVersionIsRegistered(registeredAppName, adr, version);
 		}
 	}
 
-	public void validateAppVersionIsRegistered(AppDeploymentRequest appDeploymentRequest, String appVersion) {
-		String name = appDeploymentRequest.getDefinition().getName();
+	private String getRegisteredName(StreamDefinition streamDefinition, String adrAppName) {
+		for (StreamAppDefinition appDefinition : streamDefinition.getAppDefinitions()) {
+			if (appDefinition.getName().equals(adrAppName)) {
+				return appDefinition.getRegisteredAppName();
+			}
+		}
+		return adrAppName;
+	}
+
+	public void validateAppVersionIsRegistered(StreamDefinition streamDefinition, AppDeploymentRequest appDeploymentRequest, String appVersion) {
+		String registeredAppName = getRegisteredName(streamDefinition, appDeploymentRequest.getDefinition().getName());
+		this.validateAppVersionIsRegistered(registeredAppName, appDeploymentRequest, appVersion);
+	}
+
+	private void validateAppVersionIsRegistered(String registeredAppName, AppDeploymentRequest appDeploymentRequest, String appVersion) {
 		String appTypeString = appDeploymentRequest.getDefinition().getProperties()
 				.get(DataFlowPropertyKeys.STREAM_APP_TYPE);
 		ApplicationType applicationType = ApplicationType.valueOf(appTypeString);
-		if (!this.appRegistryService.appExist(name, applicationType, appVersion)) {
+		if (!this.appRegistryService.appExist(registeredAppName, applicationType, appVersion)) {
 			throw new IllegalStateException(String.format("The %s:%s:%s app is not registered!",
-					name, appTypeString, appVersion));
+					registeredAppName, appTypeString, appVersion));
 		}
 	}
 
@@ -329,11 +408,11 @@ public class SkipperStreamDeployer implements StreamDeployer {
 		metadataMap.put("name", packageName);
 
 		// Add spec
-		String resourceWithoutVersion = ResourceUtils.getResourceWithoutVersion(appDeploymentRequest.getResource());
+		String resourceWithoutVersion = this.appRegistryService.getResourceWithoutVersion(appDeploymentRequest.getResource());
 		specMap.put("resource", resourceWithoutVersion);
 		specMap.put("applicationProperties", appDeploymentRequest.getDefinition().getProperties());
 		specMap.put("deploymentProperties", appDeploymentRequest.getDeploymentProperties());
-		String version = ResourceUtils.getResourceVersion(appDeploymentRequest.getResource());
+		String version = this.appRegistryService.getResourceVersion(appDeploymentRequest.getResource());
 		// Add version, including possible override via deploymentProperties - hack to store version in cmdline args
 		if (appDeploymentRequest.getCommandlineArguments().size() == 1) {
 			specMap.put("version", appDeploymentRequest.getCommandlineArguments().get(0));
@@ -347,7 +426,9 @@ public class SkipperStreamDeployer implements StreamDeployer {
 
 		DumperOptions dumperOptions = new DumperOptions();
 		dumperOptions.setDefaultFlowStyle(DumperOptions.FlowStyle.BLOCK);
-		dumperOptions.setPrettyFlow(true);
+		dumperOptions.setDefaultScalarStyle(DumperOptions.ScalarStyle.DOUBLE_QUOTED);
+		dumperOptions.setPrettyFlow(false);
+		dumperOptions.setSplitLines(false);
 		Yaml yaml = new Yaml(dumperOptions);
 		configValues.setRaw(yaml.dump(configValueMap));
 
@@ -365,21 +446,27 @@ public class SkipperStreamDeployer implements StreamDeployer {
 	}
 
 	public void undeployStream(String streamName) {
-		DeploymentState streamDeploymentState = getStreamDeploymentState(streamName);
-		if (streamDeploymentState != null && streamDeploymentState != DeploymentState.undeployed) {
-			this.skipperClient.delete(streamName, true);
+		CollectionModel<PackageMetadata> packageMetadataResources = this.skipperClient.search(streamName, false);
+		if (!packageMetadataResources.getContent().isEmpty()) {
+			try {
+				this.skipperClient.delete(streamName, true);
+			}
+			catch (ReleaseNotFoundException e) {
+				logger.info(String.format("Release not found for %s. Deleting the package %s", streamName, streamName));
+				this.skipperClient.packageDelete(streamName);
+			}
 		}
 	}
 
 	@Override
-	public Page<AppStatus> getAppStatuses(Pageable pageable) throws ExecutionException, InterruptedException {
+	public Page<AppStatus> getAppStatuses(Pageable pageable) {
 		List<String> skipperStreams = new ArrayList<>();
 		Iterable<StreamDefinition> streamDefinitions = this.streamDefinitionRepository.findAll();
 		for (StreamDefinition streamDefinition : streamDefinitions) {
 			skipperStreams.add(streamDefinition.getName());
 		}
 
-		List<AppStatus> allStatuses = getStreamStatuses(pageable, skipperStreams);
+		List<AppStatus> allStatuses = getStreamsStatuses(skipperStreams);
 
 		List<AppStatus> pagedStatuses = allStatuses.stream().skip(pageable.getPageNumber() * pageable.getPageSize())
 				.limit(pageable.getPageSize()).parallel().collect(Collectors.toList());
@@ -402,9 +489,35 @@ public class SkipperStreamDeployer implements StreamDeployer {
 	}
 
 	@Override
+	public List<AppStatus> getStreamStatuses(String streamName) {
+		return skipperStatus(streamName);
+	}
+
+	@Override
+	public LogInfo getLog(String streamName) {
+		return this.skipperClient.getLog(streamName);
+	}
+
+	@Override
+	public LogInfo getLog(String streamName, String appName) {
+		return this.skipperClient.getLog(streamName, appName);
+	}
+
+	private List<AppStatus> getStreamsStatuses(List<String> streamNames) {
+		try {
+			return this.forkJoinPool.submit(() -> streamNames.stream().parallel()
+					.map(this::skipperStatus).flatMap(List::stream).collect(Collectors.toList())).get();
+		}
+		catch (Exception e) {
+			logger.error("Failed to retrieve the Runtime Stream Statues", e);
+			throw new RuntimeException("Failed to retrieve the Runtime Stream Statues for " + streamNames);
+		}
+	}
+
+	@Override
 	public RuntimeEnvironmentInfo environmentInfo() {
 		AboutResource skipperInfo = skipperClient.info();
-		Resources<Deployer> deployers = skipperClient.listDeployers();
+		CollectionModel<Deployer> deployers = skipperClient.listDeployers();
 		RuntimeEnvironmentInfo.Builder builder = new RuntimeEnvironmentInfo.Builder()
 				.implementationName(skipperInfo.getVersionInfo().getServer().getName())
 				.implementationVersion(skipperInfo.getVersionInfo().getServer().getVersion())
@@ -442,17 +555,11 @@ public class SkipperStreamDeployer implements StreamDeployer {
 		}
 	}
 
-	private List<AppStatus> getStreamStatuses(Pageable pageable, List<String> skipperStreamNames)
-			throws ExecutionException, InterruptedException {
-		return this.forkJoinPool.submit(() -> skipperStreamNames.stream().parallel()
-				.map(this::skipperStatus).flatMap(List::stream).collect(Collectors.toList())).get();
-	}
-
 	private List<AppStatus> skipperStatus(String streamName) {
 		List<AppStatus> appStatuses = new ArrayList<>();
 		try {
 			Info info = this.skipperClient.status(streamName);
-			appStatuses.addAll(SkipperStreamDeployer.deserializeAppStatus(info.getStatus().getPlatformStatus()));
+			appStatuses.addAll(info.getStatus().getAppStatusList());
 		}
 		catch (Exception e) {
 			// ignore as we query status for all the streams.
@@ -465,8 +572,12 @@ public class SkipperStreamDeployer implements StreamDeployer {
 	 * @param streamName the name of the stream to upgrade
 	 * @param packageIdentifier the name of the package in skipper
 	 * @param configYml the YML formatted configuration values to use when upgrading
+	 * @param force the flag to indicate if the stream update is forced even if there are no differences from the existing stream
+	 * @param appNames the app names to update
+	 * @return release the upgraded release
 	 */
-	public Release upgradeStream(String streamName, PackageIdentifier packageIdentifier, String configYml) {
+	public Release upgradeStream(String streamName, PackageIdentifier packageIdentifier, String configYml,
+			boolean force, List<String> appNames) {
 		UpgradeRequest upgradeRequest = new UpgradeRequest();
 		upgradeRequest.setPackageIdentifier(packageIdentifier);
 		UpgradeProperties upgradeProperties = new UpgradeProperties();
@@ -475,6 +586,8 @@ public class SkipperStreamDeployer implements StreamDeployer {
 		upgradeProperties.setConfigValues(configValues);
 		upgradeProperties.setReleaseName(streamName);
 		upgradeRequest.setUpgradeProperties(upgradeProperties);
+		upgradeRequest.setForce(force);
+		upgradeRequest.setAppNames(appNames);
 		return this.skipperClient.upgrade(upgradeRequest);
 	}
 
@@ -482,9 +595,13 @@ public class SkipperStreamDeployer implements StreamDeployer {
 	 * Rollback the stream to a specific version
 	 * @param streamName the name of the stream to rollback
 	 * @param releaseVersion the version of the stream to rollback to
+	 * @return instance of {@link Release}
 	 */
-	public void rollbackStream(String streamName, int releaseVersion) {
-		this.skipperClient.rollback(streamName, releaseVersion);
+	public Release rollbackStream(String streamName, int releaseVersion) {
+		RollbackRequest rollbackRequest = new RollbackRequest();
+		rollbackRequest.setReleaseName(streamName);
+		rollbackRequest.setVersion(releaseVersion);
+		return this.skipperClient.rollback(rollbackRequest);
 	}
 
 	public String manifest(String name, int version) {

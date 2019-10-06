@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -18,8 +18,8 @@ package org.springframework.cloud.dataflow.rest.client;
 
 import org.springframework.cloud.dataflow.rest.resource.AppStatusResource;
 import org.springframework.hateoas.Link;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 import org.springframework.web.client.RestTemplate;
 
 /**
@@ -42,14 +42,14 @@ public class RuntimeTemplate implements RuntimeOperations {
 	 */
 	private final Link appStatusUriTemplate;
 
-	RuntimeTemplate(RestTemplate restTemplate, ResourceSupport resources) {
+	RuntimeTemplate(RestTemplate restTemplate, RepresentationModel<?> resources) {
 		this.restTemplate = restTemplate;
-		this.appStatusesUriTemplate = resources.getLink("runtime/apps");
-		this.appStatusUriTemplate = resources.getLink("runtime/apps/app");
+		this.appStatusesUriTemplate = resources.getLink("runtime/apps").get();
+		this.appStatusUriTemplate = resources.getLink("runtime/apps/{appId}").get();
 	}
 
 	@Override
-	public PagedResources<AppStatusResource> status() {
+	public PagedModel<AppStatusResource> status() {
 		String uriTemplate = appStatusesUriTemplate.expand().getHref();
 		uriTemplate = uriTemplate + "?size=2000";
 		return restTemplate.getForObject(uriTemplate, AppStatusResource.Page.class);

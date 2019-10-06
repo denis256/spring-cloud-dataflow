@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,14 +16,14 @@
 
 package org.springframework.cloud.dataflow.rest.resource.about;
 
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.RepresentationModel;
 
 /**
  * Provides meta-information about the Spring Cloud Data Flow server.
  *
  * @author Gunnar Hillert
  */
-public class AboutResource extends ResourceSupport {
+public class AboutResource extends RepresentationModel {
 
 	private FeatureInfo featureInfo = new FeatureInfo();
 
@@ -32,6 +32,8 @@ public class AboutResource extends ResourceSupport {
 	private SecurityInfo securityInfo = new SecurityInfo();
 
 	private RuntimeEnvironment runtimeEnvironment = new RuntimeEnvironment();
+
+	private GrafanaInfo grafanaInfo = new GrafanaInfo();
 
 	/**
 	 * Default constructor for serialization frameworks.
@@ -71,4 +73,11 @@ public class AboutResource extends ResourceSupport {
 		this.runtimeEnvironment = runtimeEnvironment;
 	}
 
+	public GrafanaInfo getGrafanaInfo() {
+		return grafanaInfo;
+	}
+
+	public void setGrafanaInfo(GrafanaInfo grafanaInfo) {
+		this.grafanaInfo = grafanaInfo;
+	}
 }

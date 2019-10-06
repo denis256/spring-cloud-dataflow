@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,6 +22,7 @@ import java.util.Map;
 import org.junit.Test;
 
 import org.springframework.cloud.dataflow.core.dsl.ParseException;
+import org.springframework.cloud.dataflow.core.dsl.StreamParser;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.hamcrest.Matchers.is;
@@ -56,6 +57,18 @@ public class StreamDefinitionTests {
 		assertEquals("ticktock.time", log.getProperties().get(BindingPropertyKeys.INPUT_DESTINATION));
 		assertEquals("ticktock", log.getProperties().get(BindingPropertyKeys.INPUT_GROUP));
 		assertFalse(log.getProperties().containsKey(BindingPropertyKeys.OUTPUT_DESTINATION));
+	}
+	
+	@Test
+	public void testLongRunningNonStreamApps() {
+		StreamDefinition sd = new StreamDefinition("something","aaa");
+		assertEquals(ApplicationType.app, sd.getAppDefinitions().get(0).getApplicationType());
+		sd = new StreamDefinition("something","aaa|| bbb");
+		assertEquals(ApplicationType.app, sd.getAppDefinitions().get(0).getApplicationType());
+		assertEquals(ApplicationType.app, sd.getAppDefinitions().get(1).getApplicationType());
+		sd = new StreamDefinition("something","aaa --aaa=bbb || bbb");
+		assertEquals(ApplicationType.app, sd.getAppDefinitions().get(0).getApplicationType());
+		assertEquals(ApplicationType.app, sd.getAppDefinitions().get(1).getApplicationType());
 	}
 
 	@Test
@@ -115,6 +128,7 @@ public class StreamDefinitionTests {
 		StreamAppDefinition sink = requests.get(1);
 		assertEquals("foo", source.getName());
 		assertEquals("test", source.getStreamName());
+		assertEquals(ApplicationType.source, source.getApplicationType());
 		Map<String, String> sourceParameters = source.getProperties();
 		assertEquals(4, sourceParameters.size());
 		assertEquals("1", sourceParameters.get("x"));
@@ -124,6 +138,7 @@ public class StreamDefinitionTests {
 		Map<String, String> sinkParameters = sink.getProperties();
 		assertEquals(3, sinkParameters.size());
 		assertEquals("3", sinkParameters.get("z"));
+		assertEquals(ApplicationType.sink, sink.getApplicationType());
 	}
 
 	@Test
@@ -133,6 +148,9 @@ public class StreamDefinitionTests {
 		assertEquals(3, requests.size());
 		assertEquals("foo", requests.get(0).getProperties().get(BindingPropertyKeys.INPUT_DESTINATION));
 		assertEquals("test", requests.get(0).getProperties().get(BindingPropertyKeys.INPUT_GROUP));
+		assertEquals(ApplicationType.processor, requests.get(0).getApplicationType());
+		assertEquals(ApplicationType.processor, requests.get(1).getApplicationType());
+		assertEquals(ApplicationType.sink, requests.get(2).getApplicationType());
 	}
 
 	@Test
@@ -155,7 +173,7 @@ public class StreamDefinitionTests {
 	public void appWithBadDestination() throws Exception {
 		boolean isException = false;
 		try {
-			new StreamDefinition("test", "app > foo");
+			new StreamParser("test", "app > foo").parse();
 		}
 		catch (Exception e) {
 			isException = true;

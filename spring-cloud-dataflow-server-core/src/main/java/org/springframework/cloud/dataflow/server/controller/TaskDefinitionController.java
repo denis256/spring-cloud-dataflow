@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2017 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,22 +16,30 @@
 
 package org.springframework.cloud.dataflow.server.controller;
 
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+
 import org.springframework.cloud.dataflow.core.TaskDefinition;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
 import org.springframework.cloud.dataflow.rest.resource.TaskDefinitionResource;
-import org.springframework.cloud.dataflow.server.repository.DeploymentIdRepository;
-import org.springframework.cloud.dataflow.server.repository.DeploymentKey;
+import org.springframework.cloud.dataflow.rest.resource.TaskExecutionResource;
+import org.springframework.cloud.dataflow.rest.util.ArgumentSanitizer;
+import org.springframework.cloud.dataflow.server.controller.support.TaskExecutionAwareTaskDefinition;
 import org.springframework.cloud.dataflow.server.repository.NoSuchTaskDefinitionException;
 import org.springframework.cloud.dataflow.server.repository.TaskDefinitionRepository;
-import org.springframework.cloud.dataflow.server.repository.support.SearchPageable;
-import org.springframework.cloud.dataflow.server.service.TaskService;
+import org.springframework.cloud.dataflow.server.service.TaskDeleteService;
+import org.springframework.cloud.dataflow.server.service.TaskSaveService;
+import org.springframework.cloud.dataflow.server.service.impl.TaskServiceUtils;
 import org.springframework.cloud.deployer.spi.task.TaskLauncher;
-import org.springframework.cloud.deployer.spi.task.TaskStatus;
+import org.springframework.cloud.task.repository.TaskExecution;
+import org.springframework.cloud.task.repository.TaskExplorer;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PagedResourcesAssembler;
-import org.springframework.hateoas.ExposesResourceFor;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.mvc.ResourceAssemblerSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.server.ExposesResourceFor;
+import org.springframework.hateoas.server.mvc.RepresentationModelAssemblerSupport;
 import org.springframework.http.HttpStatus;
 import org.springframework.util.Assert;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -48,6 +56,8 @@ import org.springframework.web.bind.annotation.RestController;
  * @author Marius Bogoevici
  * @author Glenn Renfro
  * @author Mark Fisher
+ * @author Gunnar Hillert
+ * @author Daniel Serleg
  */
 @RestController
 @RequestMapping("/tasks/definitions")
@@ -56,21 +66,15 @@ public class TaskDefinitionController {
 
 	private final Assembler taskAssembler = new Assembler();
 
-	/**
-	 * The repository this controller will use for deployment IDs.
-	 */
-	private final DeploymentIdRepository deploymentIdRepository;
+	private final TaskDefinitionRepository repository;
 
-	/**
-	 * The app registry this controller will use to lookup apps.
-	 */
-	private final AppRegistryCommon appRegistry;
+	private final TaskSaveService taskSaveService;
 
-	private TaskDefinitionRepository repository;
+	private final TaskDeleteService taskDeleteService;
 
-	private TaskLauncher taskLauncher;
+	private final TaskExplorer explorer;
 
-	private TaskService taskService;
+	private final ArgumentSanitizer argumentSanitizer = new ArgumentSanitizer();
 
 	/**
 	 * Creates a {@code TaskDefinitionController} that delegates
@@ -79,25 +83,21 @@ public class TaskDefinitionController {
 	 * <li>task status checks to the provided {@link TaskLauncher}</li>
 	 * </ul>
 	 *
+	 * @param taskExplorer used to look up TaskExecutions.
 	 * @param repository the repository this controller will use for task CRUD operations.
-	 * @param deploymentIdRepository the repository this controller will use for
-	 * deployment IDs
-	 * @param taskLauncher the TaskLauncher this controller will use to check task status.
-	 * @param appRegistry the app registry to look up registered apps.
-	 * @param taskService handles specialized behavior needed for tasks.
+	 * @param taskSaveService handles Task saving related operations.
+	 * @param taskDeleteService handles Task deletion related operations.
 	 */
-	public TaskDefinitionController(TaskDefinitionRepository repository, DeploymentIdRepository deploymentIdRepository,
-			TaskLauncher taskLauncher, AppRegistryCommon appRegistry, TaskService taskService) {
+	public TaskDefinitionController(TaskExplorer taskExplorer, TaskDefinitionRepository repository,
+			TaskSaveService taskSaveService, TaskDeleteService taskDeleteService) {
+		Assert.notNull(taskExplorer, "taskExplorer must not be null");
 		Assert.notNull(repository, "repository must not be null");
-		Assert.notNull(deploymentIdRepository, "deploymentIdRepository must not be null");
-		Assert.notNull(taskLauncher, "taskLauncher must not be null");
-		Assert.notNull(appRegistry, "appRegistry must not be null");
-		Assert.notNull(taskService, "taskService must not be null");
+		Assert.notNull(taskSaveService, "taskSaveService must not be null");
+		Assert.notNull(taskDeleteService, "taskDeleteService must not be null");
+		this.explorer = taskExplorer;
 		this.repository = repository;
-		this.deploymentIdRepository = deploymentIdRepository;
-		this.taskLauncher = taskLauncher;
-		this.appRegistry = appRegistry;
-		this.taskService = taskService;
+		this.taskSaveService = taskSaveService;
+		this.taskDeleteService = taskDeleteService;
 	}
 
 	/**
@@ -105,13 +105,15 @@ public class TaskDefinitionController {
 	 *
 	 * @param name name the name of the task
 	 * @param dsl DSL definition for the task
+	 * @param description description of the task definition
 	 * @return the task definition
 	 */
 	@RequestMapping(value = "", method = RequestMethod.POST)
-	public TaskDefinitionResource save(@RequestParam("name") String name, @RequestParam("definition") String dsl) {
-		TaskDefinition taskDefinition = new TaskDefinition(name, dsl);
-		taskService.saveTaskDefinition(name, dsl);
-		return taskAssembler.toResource(taskDefinition);
+	public TaskDefinitionResource save(@RequestParam("name") String name, @RequestParam("definition") String dsl,
+									   @RequestParam(value = "description", defaultValue = "") String description) {
+		TaskDefinition taskDefinition = new TaskDefinition(name, dsl, description);
+		taskSaveService.saveTaskDefinition(taskDefinition);
+		return taskAssembler.toModel(new TaskExecutionAwareTaskDefinition(taskDefinition));
 	}
 
 	/**
@@ -122,7 +124,17 @@ public class TaskDefinitionController {
 	@RequestMapping(value = "/{name}", method = RequestMethod.DELETE)
 	@ResponseStatus(HttpStatus.OK)
 	public void destroyTask(@PathVariable("name") String name) {
-		taskService.deleteTaskDefinition(name);
+		taskDeleteService.deleteTaskDefinition(name);
+	}
+
+	/**
+	 * Delete all task from the repository.
+	 *
+	 */
+	@RequestMapping(value = "", method = RequestMethod.DELETE)
+	@ResponseStatus(HttpStatus.OK)
+	public void destroyAll() {
+		taskDeleteService.deleteAll();
 	}
 
 	/**
@@ -130,22 +142,42 @@ public class TaskDefinitionController {
 	 *
 	 * @param pageable page-able collection of {@code TaskDefinitionResource}.
 	 * @param assembler assembler for the {@link TaskDefinition}
-	 * @param search optional search parameter
+	 * @param search optional findByTaskNameContains parameter
 	 * @return a list of task definitions
 	 */
 	@RequestMapping(value = "", method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
-	public PagedResources<TaskDefinitionResource> list(Pageable pageable, @RequestParam(required = false) String search,
-			PagedResourcesAssembler<TaskDefinition> assembler) {
+	public PagedModel<TaskDefinitionResource> list(Pageable pageable, @RequestParam(required = false) String search,
+			PagedResourcesAssembler<TaskExecutionAwareTaskDefinition> assembler) {
 
+		final Page<TaskDefinition> taskDefinitions;
 		if (search != null) {
-			final SearchPageable searchPageable = new SearchPageable(pageable, search);
-			searchPageable.addColumns("DEFINITION_NAME", "DEFINITION");
-			return assembler.toResource(repository.search(searchPageable), taskAssembler);
+			taskDefinitions = repository.findByTaskNameContains(search, pageable);
 		}
 		else {
-			return assembler.toResource(repository.findAll(pageable), taskAssembler);
+			taskDefinitions = repository.findAll(pageable);
 		}
+
+		final java.util.HashMap<String, TaskDefinition> taskDefinitionMap = new java.util.HashMap<>();
+
+		for (TaskDefinition taskDefinition : taskDefinitions) {
+			taskDefinitionMap.put(taskDefinition.getName(), taskDefinition);
+		}
+
+		final List<TaskExecution> taskExecutions;
+
+		if (!taskDefinitionMap.isEmpty()) {
+			taskExecutions = this.explorer.getLatestTaskExecutionsByTaskNames(
+					taskDefinitionMap.keySet().toArray(new String[taskDefinitionMap.size()]));
+		}
+		else {
+			taskExecutions = null;
+		}
+
+		final Page<TaskExecutionAwareTaskDefinition> taskExecutionAwareTaskDefinitions = taskDefinitions
+				.map(new TaskDefinitionConverter(taskExecutions));
+
+		return assembler.toModel(taskExecutionAwareTaskDefinitions, taskAssembler);
 	}
 
 	/**
@@ -157,43 +189,82 @@ public class TaskDefinitionController {
 	@RequestMapping(value = "/{name}", method = RequestMethod.GET)
 	@ResponseStatus(HttpStatus.OK)
 	public TaskDefinitionResource display(@PathVariable("name") String name) {
-		TaskDefinition definition = repository.findOne(name);
-		if (definition == null) {
-			throw new NoSuchTaskDefinitionException(name);
+		TaskDefinition definition = this.repository.findById(name)
+				.orElseThrow(() -> new NoSuchTaskDefinitionException(name));
+		final TaskExecution taskExecution = this.explorer.getLatestTaskExecutionForTaskName(name);
+
+		if (taskExecution != null) {
+			return taskAssembler.toModel(new TaskExecutionAwareTaskDefinition(definition, taskExecution));
 		}
-		return taskAssembler.toResource(definition);
+		else {
+			return taskAssembler.toModel(new TaskExecutionAwareTaskDefinition(definition));
+		}
 	}
 
 	/**
-	 * {@link org.springframework.hateoas.ResourceAssembler} implementation that converts
+	 * {@link org.springframework.hateoas.server.ResourceAssembler} implementation that converts
 	 * {@link TaskDefinition}s to {@link TaskDefinitionResource}s.
 	 */
-	class Assembler extends ResourceAssemblerSupport<TaskDefinition, TaskDefinitionResource> {
+	class Assembler extends RepresentationModelAssemblerSupport<TaskExecutionAwareTaskDefinition, TaskDefinitionResource> {
 
 		public Assembler() {
 			super(TaskDefinitionController.class, TaskDefinitionResource.class);
 		}
 
 		@Override
-		public TaskDefinitionResource toResource(TaskDefinition taskDefinition) {
-			return createResourceWithId(taskDefinition.getName(), taskDefinition);
+		public TaskDefinitionResource toModel(TaskExecutionAwareTaskDefinition taskExecutionAwareTaskDefinition) {
+			return createModelWithId(taskExecutionAwareTaskDefinition.getTaskDefinition().getName(),
+					taskExecutionAwareTaskDefinition);
 		}
 
 		@Override
-		public TaskDefinitionResource instantiateResource(TaskDefinition taskDefinition) {
-			String key = DeploymentKey.forTaskDefinition(taskDefinition);
-			String id = deploymentIdRepository.findOne(key);
-			boolean composed = taskService.isComposedDefinition(taskDefinition.getDslText());
-			TaskStatus status = null;
-			if (id != null) {
-				status = taskLauncher.status(id);
+		public TaskDefinitionResource instantiateModel(
+				TaskExecutionAwareTaskDefinition taskExecutionAwareTaskDefinition) {
+			boolean composed = TaskServiceUtils
+					.isComposedTaskDefinition(taskExecutionAwareTaskDefinition.getTaskDefinition().getDslText());
+			TaskDefinitionResource taskDefinitionResource = new TaskDefinitionResource(
+					taskExecutionAwareTaskDefinition.getTaskDefinition().getName(),
+					argumentSanitizer.sanitizeTaskDsl(taskExecutionAwareTaskDefinition.getTaskDefinition()),
+					taskExecutionAwareTaskDefinition.getTaskDefinition().getDescription());
+			if (taskExecutionAwareTaskDefinition.getLatestTaskExecution() != null) {
+				taskDefinitionResource.setLastTaskExecution(
+						new TaskExecutionResource(taskExecutionAwareTaskDefinition.getLatestTaskExecution()));
 			}
-			String state = (status != null) ? status.getState().name() : "unknown";
-			TaskDefinitionResource taskDefinitionResource = new TaskDefinitionResource(taskDefinition.getName(),
-					taskDefinition.getDslText());
 			taskDefinitionResource.setComposed(composed);
-			taskDefinitionResource.setStatus(state);
 			return taskDefinitionResource;
 		}
 	}
+
+	class TaskDefinitionConverter implements Function<TaskDefinition, TaskExecutionAwareTaskDefinition> {
+		final Map<String, TaskExecution> taskExecutions;
+
+		public TaskDefinitionConverter(List<TaskExecution> taskExecutions) {
+			super();
+			if (taskExecutions != null) {
+				this.taskExecutions = new HashMap<>(taskExecutions.size());
+				for (TaskExecution taskExecution : taskExecutions) {
+					this.taskExecutions.put(taskExecution.getTaskName(), taskExecution);
+				}
+			}
+			else {
+				this.taskExecutions = null;
+			}
+		}
+
+		@Override
+		public TaskExecutionAwareTaskDefinition apply(TaskDefinition source) {
+			TaskExecution lastTaskExecution = null;
+
+			if (taskExecutions != null) {
+				lastTaskExecution = taskExecutions.get(source.getName());
+			}
+
+			if (lastTaskExecution != null) {
+				return new TaskExecutionAwareTaskDefinition(source, lastTaskExecution);
+			}
+			else {
+				return new TaskExecutionAwareTaskDefinition(source);
+			}
+		}
+	};
 }

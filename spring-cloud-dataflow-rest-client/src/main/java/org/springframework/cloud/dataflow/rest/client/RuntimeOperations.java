@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,7 +17,7 @@
 package org.springframework.cloud.dataflow.rest.client;
 
 import org.springframework.cloud.dataflow.rest.resource.AppStatusResource;
-import org.springframework.hateoas.PagedResources;
+import org.springframework.hateoas.PagedModel;
 
 /**
  * Defines operations available for obtaining information about deployed apps.
@@ -30,7 +30,7 @@ public interface RuntimeOperations {
 	/**
 	 * @return the runtime information about all deployed apps.
 	 */
-	PagedResources<AppStatusResource> status();
+	PagedModel<AppStatusResource> status();
 
 	/**
 	 * @param deploymentId the deployment id

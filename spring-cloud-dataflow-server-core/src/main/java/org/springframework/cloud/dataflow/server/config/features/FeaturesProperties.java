@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,27 +31,15 @@ public class FeaturesProperties {
 
 	public static final String STREAMS_ENABLED = "streams-enabled";
 
+	public static final String SCHEDULES_ENABLED = "schedules-enabled";
+
 	public static final String TASKS_ENABLED = "tasks-enabled";
-
-	public static final String ANALYTICS_ENABLED = "analytics-enabled";
-
-	public static final String SKIPPER_ENABLED = "skipper-enabled";
-
-	private boolean analyticsEnabled = true;
 
 	private boolean streamsEnabled = true;
 
 	private boolean tasksEnabled = true;
 
-	private boolean skipperEnabled = false;
-
-	public boolean isAnalyticsEnabled() {
-		return this.analyticsEnabled;
-	}
-
-	public void setAnalyticsEnabled(boolean analyticsEnabled) {
-		this.analyticsEnabled = analyticsEnabled;
-	}
+	private boolean schedulesEnabled = false;
 
 	public boolean isStreamsEnabled() {
 		return this.streamsEnabled;
@@ -69,11 +57,11 @@ public class FeaturesProperties {
 		this.tasksEnabled = tasksEnabled;
 	}
 
-	public boolean isSkipperEnabled() {
-		return this.skipperEnabled;
+	public boolean isSchedulesEnabled() {
+		return schedulesEnabled;
 	}
 
-	public void setSkipperEnabled(boolean skipperEnabled) {
-		this.skipperEnabled = skipperEnabled;
+	public void setSchedulesEnabled(boolean schedulesEnabled) {
+		this.schedulesEnabled = schedulesEnabled;
 	}
 }

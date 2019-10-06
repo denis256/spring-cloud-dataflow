@@ -1,11 +1,11 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,8 +30,9 @@ import org.springframework.batch.support.PropertiesConverter;
 import org.springframework.cloud.dataflow.rest.job.TaskJobExecution;
 import org.springframework.cloud.dataflow.rest.job.support.JobUtils;
 import org.springframework.cloud.dataflow.rest.job.support.TimeUtils;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.cloud.dataflow.rest.util.ArgumentSanitizer;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 import org.springframework.util.Assert;
 
 /**
@@ -39,8 +40,9 @@ import org.springframework.util.Assert;
  *
  * @author Glenn Renfro
  * @author Gunnar Hillert
+ * @author Ilayaperumal Gopinathan
  */
-public class JobExecutionResource extends ResourceSupport {
+public class JobExecutionResource extends RepresentationModel<JobExecutionResource> {
 
 	private static final String LINE_SEPARATOR = System.getProperty("line.separator");
 
@@ -84,6 +86,8 @@ public class JobExecutionResource extends ResourceSupport {
 
 	private TimeZone timeZone;
 
+	private final ArgumentSanitizer argumentSanitizer = new ArgumentSanitizer();
+
 	/**
 	 * Default constructor to be used by Jackson.
 	 */
@@ -99,9 +103,10 @@ public class JobExecutionResource extends ResourceSupport {
 		this.timeZone = timeZone;
 		this.executionId = jobExecution.getId();
 		this.jobId = jobExecution.getJobId();
-		this.stepExecutionCount = jobExecution.getStepExecutions().size();
-		this.jobParameters = converter.getProperties(jobExecution.getJobParameters());
-		this.jobParametersString = fromJobParameters(jobExecution.getJobParameters());
+		this.stepExecutionCount = taskJobExecution.getStepExecutionCount();
+		this.jobParameters =converter.getProperties(jobExecution.getJobParameters());
+		this.jobParametersString = fromJobParameters(
+				this.argumentSanitizer.sanitizeJobParameters(jobExecution.getJobParameters()));
 		this.defined = taskJobExecution.isTaskDefined();
 		JobInstance jobInstance = jobExecution.getJobInstance();
 		if (jobInstance != null) {
@@ -208,6 +213,6 @@ public class JobExecutionResource extends ResourceSupport {
 
 	}
 
-	public static class Page extends PagedResources<JobExecutionResource> {
+	public static class Page extends PagedModel<JobExecutionResource> {
 	}
 }

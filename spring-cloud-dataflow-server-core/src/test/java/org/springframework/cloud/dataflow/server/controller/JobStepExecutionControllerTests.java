@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2018 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,7 @@ package org.springframework.cloud.dataflow.server.controller;
 import java.util.ArrayList;
 import java.util.Date;
 
+import org.hamcrest.Matchers;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -32,14 +33,15 @@ import org.springframework.batch.item.ExecutionContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.batch.BatchProperties;
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
-import org.springframework.boot.autoconfigure.jdbc.EmbeddedDataSourceConfiguration;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
+import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase.Replace;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.cloud.dataflow.rest.job.support.ISO8601DateFormatWithMilliSeconds;
+import org.springframework.cloud.dataflow.rest.support.jackson.ExecutionContextJacksonMixIn;
+import org.springframework.cloud.dataflow.rest.support.jackson.ISO8601DateFormatWithMilliSeconds;
+import org.springframework.cloud.dataflow.rest.support.jackson.StepExecutionJacksonMixIn;
 import org.springframework.cloud.dataflow.server.config.apps.CommonApplicationProperties;
 import org.springframework.cloud.dataflow.server.configuration.JobDependencies;
-import org.springframework.cloud.dataflow.server.job.support.ExecutionContextJacksonMixIn;
-import org.springframework.cloud.dataflow.server.job.support.StepExecutionJacksonMixIn;
 import org.springframework.cloud.task.batch.listener.TaskBatchDao;
 import org.springframework.cloud.task.repository.TaskExecution;
 import org.springframework.cloud.task.repository.dao.TaskExecutionDao;
@@ -64,10 +66,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  * @author Glenn Renfro
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = { EmbeddedDataSourceConfiguration.class, JobDependencies.class,
+@SpringBootTest(classes = { JobDependencies.class,
 		PropertyPlaceholderAutoConfiguration.class, BatchProperties.class })
 @EnableConfigurationProperties({ CommonApplicationProperties.class })
-@DirtiesContext
+@DirtiesContext(classMode = DirtiesContext.ClassMode.BEFORE_EACH_TEST_METHOD)
+@AutoConfigureTestDatabase(replace = Replace.ANY)
 public class JobStepExecutionControllerTests {
 
 	private final static String BASE_JOB_NAME = "myJob";
@@ -86,7 +89,7 @@ public class JobStepExecutionControllerTests {
 
 	private final static String STEP_NAME_FOOBAR = BASE_STEP_NAME + "_FOOBAR";
 
-	private static boolean initialized = false;
+	private boolean initialized = false;
 
 	@Autowired
 	private TaskExecutionDao dao;
@@ -138,8 +141,18 @@ public class JobStepExecutionControllerTests {
 
 	@Test
 	public void testSingleGetStepExecution() throws Exception {
-		mockMvc.perform(get("/jobs/executions/1/steps/1").accept(MediaType.APPLICATION_JSON)).andExpect(status().isOk())
-				.andExpect(content().json("{jobExecutionId: " + 1 + "}"));
+		validateStepDetail(1, 1, STEP_NAME_ORIG);
+		validateStepDetail(2, 2 ,STEP_NAME_ORIG);
+		validateStepDetail(2, 3 ,STEP_NAME_FOO);
+		validateStepDetail(3, 4 ,STEP_NAME_ORIG);
+		validateStepDetail(3, 5 ,STEP_NAME_FOO);
+		validateStepDetail(3, 6 ,STEP_NAME_FOOBAR);
+	}
+
+	private void validateStepDetail(int jobId, int stepId, String contextValue) throws Exception{
+		mockMvc.perform(get(String.format("/jobs/executions/%d/steps/%d", jobId, stepId)).accept(MediaType.APPLICATION_JSON)).andExpect(status().isOk())
+				.andExpect(content().json(String.format("{jobExecutionId: %d}", jobId)))
+				.andExpect(content().string(Matchers.containsString(String.format("{\"stepval\":\"%s\"}", contextValue))));
 	}
 
 	@Test
@@ -166,6 +179,9 @@ public class JobStepExecutionControllerTests {
 		for (String stepName : stepNames) {
 			StepExecution stepExecution = new StepExecution(stepName, jobExecution, 1L);
 			stepExecution.setId(null);
+			ExecutionContext context = new ExecutionContext();
+			context.put("stepval", stepName);
+			stepExecution.setExecutionContext(context);
 			jobRepository.add(stepExecution);
 		}
 		TaskExecution taskExecution = dao.createTaskExecution(jobName, new Date(), new ArrayList<String>(), null);

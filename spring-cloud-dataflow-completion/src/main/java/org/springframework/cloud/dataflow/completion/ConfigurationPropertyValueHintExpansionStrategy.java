@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2017 the original author or authors.
+ * Copyright 2015-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,13 +22,13 @@ import java.util.Set;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.StreamAppDefinition;
 import org.springframework.cloud.dataflow.core.StreamDefinition;
 import org.springframework.cloud.dataflow.core.dsl.CheckPointedParseException;
 import org.springframework.cloud.dataflow.core.dsl.Token;
 import org.springframework.cloud.dataflow.core.dsl.TokenKind;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 
 /**
  * Attempts to fill in possible values after a {@literal --foo=prefix} (syntactically
@@ -45,7 +45,7 @@ public class ConfigurationPropertyValueHintExpansionStrategy implements Expansio
 	@Autowired
 	private ValueHintProvider[] valueHintProviders = new ValueHintProvider[0];
 
-	ConfigurationPropertyValueHintExpansionStrategy(AppRegistryCommon appRegistry,
+	ConfigurationPropertyValueHintExpansionStrategy(AppRegistryService appRegistry,
 			ApplicationConfigurationMetadataResolver metadataResolver) {
 		this.collectorSupport = new ProposalsCollectorSupportUtils(appRegistry, metadataResolver);
 	}
@@ -65,7 +65,8 @@ public class ConfigurationPropertyValueHintExpansionStrategy implements Expansio
 		StreamAppDefinition lastApp = parseResult.getDeploymentOrderIterator().next();
 		String alreadyTyped = lastApp.getProperties().get(propertyName);
 
-		AppRegistration lastAppRegistration = this.collectorSupport.findAppRegistration(lastApp.getName(), CompletionUtils.determinePotentialTypes(lastApp));
+		AppRegistration lastAppRegistration = this.collectorSupport.findAppRegistration(lastApp.getName(),
+				CompletionUtils.determinePotentialTypes(lastApp, parseResult.getAppDefinitions().size() > 1));
 		if (lastAppRegistration != null) {
 			return this.collectorSupport.addAlreadyTypedValueHintsProposals(text, lastAppRegistration, collector, propertyName, valueHintProviders, alreadyTyped);
 		}

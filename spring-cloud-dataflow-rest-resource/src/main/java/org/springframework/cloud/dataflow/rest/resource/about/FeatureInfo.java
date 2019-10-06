@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -30,7 +30,9 @@ public class FeatureInfo {
 
 	private boolean tasksEnabled = true;
 
-	private boolean skipperEnabled = false;
+	private boolean schedulesEnabled = false;
+
+	private boolean grafanaEnabled = false;
 
 	/**
 	 * Default constructor for serialization frameworks.
@@ -62,12 +64,19 @@ public class FeatureInfo {
 		this.tasksEnabled = tasksEnabled;
 	}
 
-	public boolean isSkipperEnabled() {
-		return skipperEnabled;
+	public boolean isSchedulesEnabled() {
+		return schedulesEnabled;
 	}
 
-	public void setSkipperEnabled(boolean skipperEnabled) {
-		this.skipperEnabled = skipperEnabled;
+	public void setSchedulesEnabled(boolean schedulesEnabled) {
+		this.schedulesEnabled = schedulesEnabled;
 	}
 
+	public boolean isGrafanaEnabled() {
+		return grafanaEnabled;
+	}
+
+	public void setGrafanaEnabled(boolean grafanaEnabled) {
+		this.grafanaEnabled = grafanaEnabled;
+	}
 }

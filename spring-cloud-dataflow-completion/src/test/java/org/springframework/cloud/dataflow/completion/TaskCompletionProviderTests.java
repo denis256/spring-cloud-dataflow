@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
-import org.springframework.cloud.dataflow.registry.AppRegistry;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.hamcrest.Matchers.empty;
@@ -36,7 +35,7 @@ import static org.junit.Assert.assertThat;
  * Integration tests for TaskCompletionProvider.
  * <p>
  * <p>
- * These tests work hand in hand with a custom {@link AppRegistry} and
+ * These tests work hand in hand with a custom {@link org.springframework.cloud.dataflow.registry.service.AppRegistryService} and
  * {@link ApplicationConfigurationMetadataResolver} to provide completions for a fictional
  * set of well known apps.
  * </p>
@@ -47,7 +46,8 @@ import static org.junit.Assert.assertThat;
  */
 @SuppressWarnings("unchecked")
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = { CompletionConfiguration.class, CompletionTestsMocks.class })
+@SpringBootTest(classes = { CompletionConfiguration.class, CompletionTestsMocks.class }, properties = {
+		"spring.main.allow-bean-definition-overriding=true" })
 public class TaskCompletionProviderTests {
 
 	@Autowired

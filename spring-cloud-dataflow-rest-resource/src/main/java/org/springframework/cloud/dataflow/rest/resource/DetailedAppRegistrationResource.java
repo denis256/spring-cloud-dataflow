@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -20,7 +20,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import org.springframework.boot.configurationmetadata.ConfigurationMetadataProperty;
-import org.springframework.hateoas.PagedResources;
+import org.springframework.hateoas.PagedModel;
 
 /**
  * Extension of {@link AppRegistrationResource} that contains application options and
@@ -54,7 +54,9 @@ public class DetailedAppRegistrationResource extends AppRegistrationResource {
 	 *
 	 * @param name application name
 	 * @param type application type
+	 * @param version application version
 	 * @param coordinates Maven coordinates for the application artifact
+	 * @param isDefault is this the default app
 	 */
 	public DetailedAppRegistrationResource(String name, String type, String version, String coordinates, Boolean isDefault) {
 		super(name, type, version, coordinates, isDefault);
@@ -110,7 +112,7 @@ public class DetailedAppRegistrationResource extends AppRegistrationResource {
 	/**
 	 * Dedicated subclass to workaround type erasure.
 	 */
-	public static class Page extends PagedResources<DetailedAppRegistrationResource> {
+	public static class Page extends PagedModel<DetailedAppRegistrationResource> {
 	}
 
 }

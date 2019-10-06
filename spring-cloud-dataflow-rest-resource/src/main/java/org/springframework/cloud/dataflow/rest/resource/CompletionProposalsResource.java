@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,7 +21,7 @@ import java.util.List;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.RepresentationModel;
 
 /**
  * Represents a list of completion proposals for the DSL when using <i>e.g.</i> TAB
@@ -29,7 +29,7 @@ import org.springframework.hateoas.ResourceSupport;
  *
  * @author Eric Bottard
  */
-public class CompletionProposalsResource extends ResourceSupport {
+public class CompletionProposalsResource extends RepresentationModel<CompletionProposalsResource> {
 
 	private List<Proposal> proposals = new ArrayList<>();
 

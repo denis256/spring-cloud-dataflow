@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2018 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,23 +22,28 @@ import javax.validation.ConstraintViolationException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.springframework.batch.admin.service.NoSuchStepExecutionException;
 import org.springframework.batch.core.launch.JobExecutionNotRunningException;
 import org.springframework.batch.core.launch.NoSuchJobException;
 import org.springframework.batch.core.launch.NoSuchJobExecutionException;
 import org.springframework.batch.core.launch.NoSuchJobInstanceException;
-import org.springframework.boot.actuate.endpoint.mvc.MetricsMvcEndpoint;
 import org.springframework.cloud.dataflow.registry.support.NoSuchAppRegistrationException;
+import org.springframework.cloud.dataflow.server.batch.NoSuchStepExecutionException;
+import org.springframework.cloud.dataflow.server.controller.support.InvalidDateRangeException;
 import org.springframework.cloud.dataflow.server.controller.support.InvalidStreamDefinitionException;
 import org.springframework.cloud.dataflow.server.job.support.JobNotRestartableException;
+import org.springframework.cloud.dataflow.server.repository.CannotDeleteNonParentTaskExecutionException;
 import org.springframework.cloud.dataflow.server.repository.DuplicateStreamDefinitionException;
 import org.springframework.cloud.dataflow.server.repository.DuplicateTaskException;
+import org.springframework.cloud.dataflow.server.repository.NoSuchAuditRecordException;
+import org.springframework.cloud.dataflow.server.repository.NoSuchScheduleException;
 import org.springframework.cloud.dataflow.server.repository.NoSuchStreamDefinitionException;
 import org.springframework.cloud.dataflow.server.repository.NoSuchTaskBatchException;
 import org.springframework.cloud.dataflow.server.repository.NoSuchTaskDefinitionException;
 import org.springframework.cloud.dataflow.server.repository.NoSuchTaskExecutionException;
-import org.springframework.cloud.dataflow.server.support.ApplicationDoesNotExistException;
-import org.springframework.hateoas.VndErrors;
+import org.springframework.cloud.dataflow.server.repository.TaskExecutionMissingExternalIdException;
+import org.springframework.cloud.dataflow.server.service.impl.OffsetOutOfBoundsException;
+import org.springframework.cloud.deployer.spi.scheduler.CreateScheduleException;
+import org.springframework.hateoas.mediatype.vnderrors.VndErrors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.util.StringUtils;
@@ -56,6 +61,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
  * @author Eric Bottard
  * @author Gunnar Hillert
  * @author Ilayaperumal Gopinathan
+ * @author Christian Tzolov
  */
 @ControllerAdvice
 public class RestControllerAdvice {
@@ -92,7 +98,7 @@ public class RestControllerAdvice {
 	 */
 	@ExceptionHandler({ AppAlreadyRegisteredException.class, DuplicateStreamDefinitionException.class,
 			DuplicateTaskException.class, StreamAlreadyDeployedException.class, StreamAlreadyDeployingException.class,
-			UnregisterAppException.class})
+			UnregisterAppException.class, InvalidCTRLaunchRequestException.class})
 	@ResponseStatus(HttpStatus.CONFLICT)
 	@ResponseBody
 	public VndErrors onConflictException(Exception e) {
@@ -129,21 +135,23 @@ public class RestControllerAdvice {
 	 * Log the exception message at warn level and stack trace as trace level. Return
 	 * response status HttpStatus.NOT_FOUND
 	 *
-	 * @param e one of the exceptions, {@link NoSuchStreamDefinitionException},
+	 * @param e one of the exceptions, {@link NoSuchAuditRecordException},
+	 * {@link NoSuchStreamDefinitionException},
 	 * {@link NoSuchAppRegistrationException}, {@link NoSuchTaskDefinitionException},
 	 * {@link NoSuchTaskExecutionException}, {@link NoSuchJobExecutionException},
 	 * {@link NoSuchJobInstanceException}, {@link NoSuchJobException},
 	 * {@link NoSuchStepExecutionException},
-	 * {@link MetricsMvcEndpoint.NoSuchMetricException}, {@link NoSuchAppException}, or
+	 * {@link NoSuchAppException}, or
 	 * {@link NoSuchAppInstanceException}
 	 * @return the error response in JSON format with media type
 	 * application/vnd.error+json
 	 */
-	@ExceptionHandler({ NoSuchStreamDefinitionException.class, NoSuchAppRegistrationException.class,
+	@ExceptionHandler({ NoSuchAuditRecordException.class,
+			NoSuchStreamDefinitionException.class, NoSuchAppRegistrationException.class,
 			NoSuchTaskDefinitionException.class, NoSuchTaskExecutionException.class, NoSuchJobExecutionException.class,
 			NoSuchJobInstanceException.class, NoSuchJobException.class, NoSuchStepExecutionException.class,
-			NoSuchTaskBatchException.class, MetricsMvcEndpoint.NoSuchMetricException.class, NoSuchAppException.class,
-			NoSuchAppInstanceException.class, ApplicationDoesNotExistException.class })
+			NoSuchTaskBatchException.class, NoSuchAppException.class, NoSuchAppInstanceException.class,
+			NoSuchScheduleException.class })
 	@ResponseStatus(HttpStatus.NOT_FOUND)
 	@ResponseBody
 	public VndErrors onNotFoundException(Exception e) {
@@ -169,7 +177,9 @@ public class RestControllerAdvice {
 	 */
 	@ExceptionHandler({ MissingServletRequestParameterException.class, HttpMessageNotReadableException.class,
 			UnsatisfiedServletRequestParameterException.class, MethodArgumentTypeMismatchException.class,
-			InvalidStreamDefinitionException.class })
+			InvalidDateRangeException.class, CannotDeleteNonParentTaskExecutionException.class,
+			InvalidStreamDefinitionException.class, CreateScheduleException.class, OffsetOutOfBoundsException.class,
+			TaskExecutionMissingExternalIdException.class})
 	@ResponseStatus(HttpStatus.BAD_REQUEST)
 	@ResponseBody
 	public VndErrors onClientGenericBadRequest(Exception e) {
@@ -177,8 +187,35 @@ public class RestControllerAdvice {
 		if (logger.isTraceEnabled()) {
 			logTraceLevelStrackTrace(e);
 		}
-		String msg = getExceptionMessage(e);
-		return new VndErrors(logref, msg);
+
+		String message = null;
+		if (e instanceof MethodArgumentTypeMismatchException) {
+			final MethodArgumentTypeMismatchException methodArgumentTypeMismatchException = (MethodArgumentTypeMismatchException) e;
+			final Class<?> requiredType = methodArgumentTypeMismatchException.getRequiredType();
+
+			final Class<?> enumType;
+
+			if (requiredType.isEnum()) {
+				enumType = requiredType;
+			}
+			else if (requiredType.isArray() && requiredType.getComponentType().isEnum()) {
+				enumType = requiredType.getComponentType();
+			}
+			else {
+				enumType = null;
+			}
+
+			if (enumType != null) {
+				final String enumValues = StringUtils.arrayToDelimitedString(enumType.getEnumConstants(), ", ");
+				message = String.format("The parameter '%s' must contain one of the following values: '%s'.", methodArgumentTypeMismatchException.getName(), enumValues);
+			}
+		}
+
+		if (message == null) {
+			message = getExceptionMessage(e);
+		}
+
+		return new VndErrors(logref, message);
 	}
 
 	/**

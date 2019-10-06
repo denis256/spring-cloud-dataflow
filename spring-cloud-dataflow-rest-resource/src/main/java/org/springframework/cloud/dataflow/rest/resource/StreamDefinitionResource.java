@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -17,8 +17,8 @@
 package org.springframework.cloud.dataflow.rest.resource;
 
 import org.springframework.cloud.dataflow.core.StreamDefinition;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 
 /**
  * A HATEOAS representation of a {@link StreamDefinition}. This class also includes a
@@ -30,7 +30,7 @@ import org.springframework.hateoas.ResourceSupport;
  * @author Ilayaperumal Gopinathan
  * @author Gunnar Hillert
  */
-public class StreamDefinitionResource extends ResourceSupport {
+public class StreamDefinitionResource extends RepresentationModel<StreamDefinitionResource> {
 
 	/**
 	 * Stream name.
@@ -43,9 +43,19 @@ public class StreamDefinitionResource extends ResourceSupport {
 	private String dslText;
 
 	/**
+	 * Original Stream definition DSL text.
+	 */
+	private String originalDslText;
+
+	/**
 	 * Stream status (i.e. deployed, undeployed, etc).
 	 */
 	private String status;
+
+	/**
+	 * Description of the stream definition.
+	 */
+	private String description;
 
 	/**
 	 * Description of the Stream status.
@@ -63,10 +73,13 @@ public class StreamDefinitionResource extends ResourceSupport {
 	 *
 	 * @param name stream name
 	 * @param dslText stream definition DSL text
+	 * @param description Description of the stream definition
 	 */
-	public StreamDefinitionResource(String name, String dslText) {
+	public StreamDefinitionResource(String name, String dslText, String originalDslText, String description) {
 		this.name = name;
 		this.dslText = dslText;
+		this.originalDslText = originalDslText;
+		this.description = description;
 	}
 
 	/**
@@ -85,6 +98,24 @@ public class StreamDefinitionResource extends ResourceSupport {
 	 */
 	public String getDslText() {
 		return this.dslText;
+	}
+
+	/**
+	 * Return the original DSL definition for this stream.
+	 *
+	 * @return the original stream definition DSL
+	 */
+	public String getOriginalDslText() {
+		return this.originalDslText;
+	}
+
+	/**
+	 * Return the description of the stream definition.
+	 *
+	 * @return stream definition description
+	 */
+	public String getDescription() {
+		return description;
 	}
 
 	/**
@@ -125,7 +156,7 @@ public class StreamDefinitionResource extends ResourceSupport {
 		this.statusDescription = statusDescription;
 	}
 
-	public static class Page extends PagedResources<StreamDefinitionResource> {
+	public static class Page extends PagedModel<StreamDefinitionResource> {
 
 	}
 

@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -19,6 +19,8 @@ package org.springframework.cloud.dataflow.server.repository.support;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import org.springframework.jdbc.core.namedparam.NamedParameterUtils;
 
 /**
  * Helper methods for SQL statement parameter parsing.
@@ -38,9 +40,9 @@ public class JdbcParameterUtils {
 	 * parameters indicated with a leading ':' or '&amp;'.
 	 * <p>
 	 * The code for this method is taken from an early version of the
-	 * {@link org.springframework.jdbc.core.namedparam.NamedParameterUtils} class.
+	 * {@link NamedParameterUtils} class.
 	 *
-	 * @param sql String to search in. Returns 0 if the given String is <code>null</code>.
+	 * @param sql String to findByTaskNameContains in. Returns 0 if the given String is <code>null</code>.
 	 * @param namedParameterHolder the list of parameter placehholder names
 	 * @return the number of parameter placeholder and adds to the namedParameterHolder
 	 * list any parsed namedParameters from the sql

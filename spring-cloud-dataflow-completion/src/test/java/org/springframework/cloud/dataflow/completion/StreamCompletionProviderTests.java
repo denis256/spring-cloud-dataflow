@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2016 the original author or authors.
+ * Copyright 2015-2018 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -22,7 +22,6 @@ import org.junit.runner.RunWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
-import org.springframework.cloud.dataflow.registry.AppRegistry;
 import org.springframework.test.context.junit4.SpringRunner;
 
 import static org.hamcrest.Matchers.empty;
@@ -36,7 +35,7 @@ import static org.junit.Assert.assertThat;
  * Integration tests for StreamCompletionProvider.
  * <p>
  * <p>
- * These tests work hand in hand with a custom {@link AppRegistry} and
+ * These tests work hand in hand with a custom {@link org.springframework.cloud.dataflow.registry.service.AppRegistryService} and
  * {@link ApplicationConfigurationMetadataResolver} to provide completions for a fictional
  * set of well known apps.
  * </p>
@@ -45,7 +44,9 @@ import static org.junit.Assert.assertThat;
  * @author Mark Fisher
  */
 @RunWith(SpringRunner.class)
-@SpringBootTest(classes = { CompletionConfiguration.class, CompletionTestsMocks.class })
+@SpringBootTest(classes = { CompletionConfiguration.class, CompletionTestsMocks.class }, properties = {
+		"spring.main.allow-bean-definition-overriding=true" })
+@SuppressWarnings("unchecked")
 public class StreamCompletionProviderTests {
 
 	@Autowired
@@ -53,8 +54,9 @@ public class StreamCompletionProviderTests {
 
 	@Test
 	// <TAB> => file,http,etc
-	public void testEmptyStartShouldProposeSourceApps() {
-		assertThat(completionProvider.complete("", 1), hasItems(Proposals.proposalThat(is("http")), Proposals.proposalThat(is("hdfs"))));
+	public void testEmptyStartShouldProposeSourceOrUnboundApps() {
+		assertThat(completionProvider.complete("", 1), hasItems(Proposals.proposalThat(is("orange")),
+			Proposals.proposalThat(is("http")), Proposals.proposalThat(is("hdfs"))));
 		assertThat(completionProvider.complete("", 1), not(hasItems(Proposals.proposalThat(is("log")))));
 	}
 
@@ -64,6 +66,21 @@ public class StreamCompletionProviderTests {
 		assertThat(completionProvider.complete("h", 1), hasItems(Proposals.proposalThat(is("http")), Proposals.proposalThat(is("hdfs"))));
 		assertThat(completionProvider.complete("ht", 1), hasItems(Proposals.proposalThat(is("http"))));
 		assertThat(completionProvider.complete("ht", 1), not(hasItems(Proposals.proposalThat(is("hdfs")))));
+	}
+
+	@Test
+	public void testUnfinishedUnboundAppNameShouldReturnCompletions2() {
+		assertThat(completionProvider.complete("", 1), hasItems(Proposals.proposalThat(is("orange"))));
+		assertThat(completionProvider.complete("o", 1), hasItems(Proposals.proposalThat(is("orange"))));
+		assertThat(completionProvider.complete("oran", 1), hasItems(Proposals.proposalThat(is("orange"))));
+		assertThat(completionProvider.complete("orange", 1), hasItems(Proposals.proposalThat(is("orange --expression=")),
+				Proposals.proposalThat(is("orange --fooble=")),Proposals.proposalThat(is("orange --expresso="))));
+		assertThat(completionProvider.complete("o1: orange||", 1), hasItems(Proposals.proposalThat(is("o1: orange|| orange"))));
+		assertThat(completionProvider.complete("o1: orange|| ", 1), hasItems(Proposals.proposalThat(is("o1: orange|| orange"))));
+		assertThat(completionProvider.complete("o1: orange ||", 1), hasItems(Proposals.proposalThat(is("o1: orange || orange"))));
+		assertThat(completionProvider.complete("o1: orange|| or", 1), hasItems(Proposals.proposalThat(is("o1: orange|| orange"))));
+		assertThat(completionProvider.complete("http | o", 1), empty());
+		assertThat(completionProvider.complete("http|| o", 1), hasItems(Proposals.proposalThat(is("http|| orange"))));
 	}
 
 	@Test

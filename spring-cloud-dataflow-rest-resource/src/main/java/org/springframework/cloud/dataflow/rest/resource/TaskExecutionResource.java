@@ -1,11 +1,11 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,8 +24,8 @@ import java.util.List;
 import org.springframework.batch.core.JobExecution;
 import org.springframework.cloud.dataflow.rest.job.TaskJobExecutionRel;
 import org.springframework.cloud.task.repository.TaskExecution;
-import org.springframework.hateoas.PagedResources;
-import org.springframework.hateoas.ResourceSupport;
+import org.springframework.hateoas.PagedModel;
+import org.springframework.hateoas.RepresentationModel;
 import org.springframework.util.Assert;
 
 /**
@@ -33,8 +33,9 @@ import org.springframework.util.Assert;
  *
  * @author Glenn Renfro
  * @author Gunnar Hillert
+ * @author Ilayaperumal Gopinathan
  */
-public class TaskExecutionResource extends ResourceSupport {
+public class TaskExecutionResource extends RepresentationModel<TaskExecutionResource> {
 
 	/**
 	 * The unique id associated with the task execution.
@@ -44,7 +45,7 @@ public class TaskExecutionResource extends ResourceSupport {
 	/**
 	 * The recorded exit code for the task.
 	 */
-	private int exitCode;
+	private Integer exitCode;
 
 	/**
 	 * User defined name for the task.
@@ -87,6 +88,12 @@ public class TaskExecutionResource extends ResourceSupport {
 	 */
 	private String externalExecutionId;
 
+	/**
+	 * This Task Execution might be a child task as part of a composed
+	 * task and have a parent task execution id. This property can be null.
+	 */
+	private Long parentExecutionId;
+
 	public TaskExecutionResource() {
 		arguments = new ArrayList<>();
 	}
@@ -101,6 +108,7 @@ public class TaskExecutionResource extends ResourceSupport {
 	public TaskExecutionResource(TaskJobExecutionRel taskJobExecutionRel) {
 		Assert.notNull(taskJobExecutionRel, "taskJobExecutionDTO must not be null");
 		this.executionId = taskJobExecutionRel.getTaskExecution().getExecutionId();
+		this.parentExecutionId = taskJobExecutionRel.getTaskExecution().getParentExecutionId();
 		this.exitCode = taskJobExecutionRel.getTaskExecution().getExitCode();
 		this.taskName = taskJobExecutionRel.getTaskExecution().getTaskName();
 		this.exitMessage = taskJobExecutionRel.getTaskExecution().getExitMessage();
@@ -118,6 +126,25 @@ public class TaskExecutionResource extends ResourceSupport {
 		}
 	}
 
+	/**
+	 * Constructor to initialize the TaskExecutionResource using a
+	 * {@link TaskExecution}.
+	 *
+	 * @param taskExecution contains the {@link TaskExecution}
+	 */
+	public TaskExecutionResource(TaskExecution taskExecution) {
+		Assert.notNull(taskExecution, "taskExecution must not be null");
+		this.executionId = taskExecution.getExecutionId();
+		this.exitCode = taskExecution.getExitCode();
+		this.taskName = taskExecution.getTaskName();
+		this.exitMessage = taskExecution.getExitMessage();
+		this.arguments = Collections.unmodifiableList(taskExecution.getArguments());
+		this.startTime = taskExecution.getStartTime();
+		this.endTime = taskExecution.getEndTime();
+		this.errorMessage = taskExecution.getErrorMessage();
+		this.externalExecutionId = taskExecution.getExternalExecutionId();
+	}
+
 	public long getExecutionId() {
 		return executionId;
 	}
@@ -126,7 +153,7 @@ public class TaskExecutionResource extends ResourceSupport {
 	 * @return the int containing the exit code of the task application upon completion.
 	 * Default is 0.
 	 */
-	public int getExitCode() {
+	public Integer getExitCode() {
 		return exitCode;
 	}
 
@@ -162,6 +189,37 @@ public class TaskExecutionResource extends ResourceSupport {
 		return externalExecutionId;
 	}
 
-	public static class Page extends PagedResources<TaskExecutionResource> {
+	public Long getParentExecutionId() {
+		return parentExecutionId;
+	}
+
+	/**
+	 * Returns the calculated status of this {@link TaskExecution}.
+	 *
+	 * If {@link #startTime} is
+	 * null, the {@link TaskExecution} is considered to be not running (never executed).
+	 *
+	 * If {@link #endTime} is
+	 * null, the {@link TaskExecution} is considered to be still running:
+	 * {@link TaskExecutionStatus#RUNNING}. If the {@link #endTime} is defined and the
+	 * {@link #exitCode} is non-zero, an status of {@link TaskExecutionStatus#ERROR} is assumed,
+	 * if {@link #exitCode} is zero, {@link TaskExecutionStatus#COMPLETE} is returned.
+	 *
+	 * @return TaskExecutionStatus, never null
+	 */
+	public TaskExecutionStatus getTaskExecutionStatus() {
+		if (this.startTime == null) {
+			return TaskExecutionStatus.UNKNOWN;
+		}
+		if (this.endTime == null) {
+			return TaskExecutionStatus.RUNNING;
+		}
+		else {
+			return (this.exitCode == null) ? TaskExecutionStatus.RUNNING :
+					((this.exitCode == 0) ? TaskExecutionStatus.COMPLETE : TaskExecutionStatus.ERROR);
+		}
+	}
+
+	public static class Page extends PagedModel<TaskExecutionResource> {
 	}
 }

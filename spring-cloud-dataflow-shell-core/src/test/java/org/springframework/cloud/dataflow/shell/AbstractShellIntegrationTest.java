@@ -1,11 +1,11 @@
 /*
- * Copyright 2015-2017 the original author or authors.
+ * Copyright 2015-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -16,8 +16,6 @@
 
 package org.springframework.cloud.dataflow.shell;
 
-import java.io.IOException;
-
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
@@ -25,25 +23,13 @@ import org.junit.rules.TestName;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.springframework.analytics.metrics.AggregateCounterRepository;
-import org.springframework.analytics.metrics.FieldValueCounterRepository;
-import org.springframework.analytics.metrics.memory.InMemoryAggregateCounterRepository;
-import org.springframework.analytics.metrics.memory.InMemoryFieldValueCounterRepository;
 import org.springframework.boot.SpringApplication;
-import org.springframework.boot.actuate.metrics.repository.InMemoryMetricRepository;
-import org.springframework.boot.actuate.metrics.repository.MetricRepository;
-import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.builder.SpringApplicationBuilder;
-import org.springframework.cloud.dataflow.rest.client.config.DataFlowClientAutoConfiguration;
-import org.springframework.cloud.dataflow.server.EnableDataFlowServer;
 import org.springframework.cloud.dataflow.shell.command.JobCommandTemplate;
-import org.springframework.cloud.dataflow.shell.command.MetricsCommandTemplate;
 import org.springframework.cloud.dataflow.shell.command.StreamCommandTemplate;
 import org.springframework.cloud.dataflow.shell.command.TaskCommandTemplate;
+import org.springframework.cloud.skipper.client.SkipperClient;
 import org.springframework.context.ApplicationContext;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.shell.core.CommandResult;
 import org.springframework.shell.core.JLineShellComponent;
 import org.springframework.util.AlternativeJdkIdGenerator;
@@ -55,7 +41,7 @@ import org.springframework.util.SocketUtils;
  * Base class for shell integration tests. This class sets up and tears down the
  * infrastructure required for executing shell tests - in particular, the Data Flow
  * server.
- * <p>
+ *
  * Extensions of this class may obtain instances of command templates. For example, call
  * {@link #stream} to obtain a {@link StreamCommandTemplate} in order to perform stream
  * operations.
@@ -65,6 +51,8 @@ import org.springframework.util.SocketUtils;
  * @author Glenn Renfro
  */
 public abstract class AbstractShellIntegrationTest {
+
+	// TODO: BOOT2 disabled metric stuff
 
 	/**
 	 * System property indicating whether the test infrastructure should be shut down
@@ -85,6 +73,11 @@ public abstract class AbstractShellIntegrationTest {
 	 * Application context for server application.
 	 */
 	protected static ApplicationContext applicationContext;
+
+	/**
+	 * Skipper client mock
+	 */
+	protected static SkipperClient skipperClient;
 
 	/**
 	 * Indicates whether the test infrastructure should be shut down after all tests are
@@ -111,7 +104,7 @@ public abstract class AbstractShellIntegrationTest {
 	public TestName name = new TestName();
 
 	@BeforeClass
-	public static void startUp() throws InterruptedException, IOException {
+	public static void startUp() {
 		if (applicationContext == null) {
 			if (System.getProperty(SHUTDOWN_AFTER_RUN) != null) {
 				shutdownAfterRun = Boolean.getBoolean(SHUTDOWN_AFTER_RUN);
@@ -126,11 +119,13 @@ public abstract class AbstractShellIntegrationTest {
 					"--spring.jmx.default-domain=" + System.currentTimeMillis(), "--spring.jmx.enabled=false",
 					"--security.basic.enabled=false", "--spring.main.show_banner=false",
 					"--spring.cloud.config.enabled=false",
-					"--spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.session"
-							+ ".SessionAutoConfiguration",
+					"--spring.autoconfigure.exclude=org.springframework.boot.autoconfigure.session.SessionAutoConfiguration,org.springframework.cloud.deployer.spi.cloudfoundry.CloudFoundryDeployerAutoConfiguration,org.springframework.cloud.deployer.spi.kubernetes.KubernetesAutoConfiguration",
 					"--spring.datasource.url=" + dataSourceUrl);
 
 			JLineShellComponent shell = applicationContext.getBean(JLineShellComponent.class);
+
+			skipperClient = applicationContext.getBean(SkipperClient.class);
+
 			if (!shell.isRunning()) {
 				shell.start();
 			}
@@ -181,11 +176,6 @@ public abstract class AbstractShellIntegrationTest {
 		return new JobCommandTemplate(dataFlowShell);
 	}
 
-	/**
-	 * Return a {@link MetricsCommandTemplate} for issuing metrics related commands.
-	 */
-	protected MetricsCommandTemplate metrics() {return new MetricsCommandTemplate(dataFlowShell); }
-
 	// Util methods
 
 	/**
@@ -194,8 +184,12 @@ public abstract class AbstractShellIntegrationTest {
 	 * @param name name to use as part of stream/task name
 	 * @return unique random stream/task name
 	 */
-	protected String generateUniqueName(String name) {
-		return name + "-" + idGenerator.generateId();
+	protected String generateUniqueStreamOrTaskName(String name) {
+		// Return stream name of 20 characters of length
+		if (name.length() > 16) {
+			name = name.substring(0, 16);
+		}
+		return name + "-" + idGenerator.generateId().toString().substring(0, 4);
 	}
 
 	/**
@@ -203,8 +197,8 @@ public abstract class AbstractShellIntegrationTest {
 	 *
 	 * @return unique random stream/task name
 	 */
-	protected String generateUniqueName() {
-		return generateUniqueName(name.getMethodName().replace('[', '-').replace("]", ""));
+	protected String generateUniqueStreamOrTaskName() {
+		return generateUniqueStreamOrTaskName(name.getMethodName().replace('[', '-').replace("]", ""));
 	}
 
 	private static class DataFlowShell extends JLineShellComponent {
@@ -215,6 +209,7 @@ public abstract class AbstractShellIntegrationTest {
 			this.shell = shell;
 		}
 
+		@Override
 		public CommandResult executeCommand(String command) {
 			CommandResult cr = this.shell.executeCommand(command);
 			if (cr.getException() != null) {
@@ -225,25 +220,4 @@ public abstract class AbstractShellIntegrationTest {
 		}
 	}
 
-	@EnableAutoConfiguration(exclude = DataFlowClientAutoConfiguration.class)
-	@EnableDataFlowServer
-	@Configuration
-	public static class TestConfig {
-
-		@Bean
-		public MetricRepository metricRepository() {
-			return new InMemoryMetricRepository();
-		}
-
-		@Bean
-		public FieldValueCounterRepository fieldValueCounterReader() {
-			return new InMemoryFieldValueCounterRepository();
-		}
-
-		@Bean
-		public AggregateCounterRepository aggregateCounterReader(RedisConnectionFactory redisConnectionFactory) {
-			return new InMemoryAggregateCounterRepository();
-		}
-
-	}
 }

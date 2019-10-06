@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -71,8 +71,6 @@ public class Target {
 	private TargetStatus status;
 
 	private boolean authenticationEnabled;
-
-	private boolean authorizationEnabled = true;
 
 	private boolean authenticated;
 
@@ -154,7 +152,7 @@ public class Target {
 
 	/**
 	 * Set the result messages indicating the success or failure while targeting the
-	 * Spring XD Admin Server.
+	 * Spring Cloud Data Flow Server.
 	 *
 	 * @param targetResultMessage Must not be empty.
 	 */
@@ -215,20 +213,6 @@ public class Target {
 	 */
 	public void setAuthenticationEnabled(boolean authenticationEnabled) {
 		this.authenticationEnabled = authenticationEnabled;
-	}
-
-	/**
-	 * @return True if authorization is enabled, false otherwise
-	 */
-	public boolean isAuthorizationEnabled() {
-		return authorizationEnabled;
-	}
-
-	/**
-	 * @param authorizationEnabled If not set, it defaults to true
-	 */
-	public void setAuthorizationEnabled(boolean authorizationEnabled) {
-		this.authorizationEnabled = authorizationEnabled;
 	}
 
 	/**

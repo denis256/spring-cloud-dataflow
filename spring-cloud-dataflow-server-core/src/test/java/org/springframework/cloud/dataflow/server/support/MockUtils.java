@@ -1,11 +1,11 @@
 /*
- * Copyright 2018 the original author or authors.
+ * Copyright 2018-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -24,7 +24,7 @@ import org.springframework.cloud.deployer.spi.core.AppDeploymentRequest;
 import org.springframework.cloud.deployer.spi.core.RuntimeEnvironmentInfo;
 import org.springframework.cloud.skipper.client.SkipperClient;
 import org.springframework.cloud.skipper.domain.Deployer;
-import org.springframework.hateoas.Resources;
+import org.springframework.hateoas.CollectionModel;
 
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -39,7 +39,7 @@ public class MockUtils {
 	public static SkipperClient configureMock(SkipperClient skipperClient) {
 		List<Deployer> deployers = new ArrayList<>();
 		deployers.add(createTestDeployer());
-		when(skipperClient.listDeployers()).thenReturn(new Resources<>(deployers, new ArrayList<>()));
+		when(skipperClient.listDeployers()).thenReturn(new CollectionModel<>(deployers, new ArrayList<>()));
 		return skipperClient;
 	}
 	/**
@@ -69,6 +69,11 @@ public class MockUtils {
 
 			@Override
 			public RuntimeEnvironmentInfo environmentInfo() {
+				return null;
+			}
+
+			@Override
+			public String getLog(String id) {
 				return null;
 			}
 		});

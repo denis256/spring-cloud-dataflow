@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,10 +21,10 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.TaskDefinition;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 
 /**
  * Provides completions by finding apps whose name starts with a prefix (which was assumed
@@ -36,9 +36,9 @@ import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
  */
 public class UnfinishedTaskAppNameExpansionStrategy implements TaskExpansionStrategy {
 
-	private final AppRegistryCommon appRegistry;
+	private final AppRegistryService appRegistry;
 
-	UnfinishedTaskAppNameExpansionStrategy(AppRegistryCommon appRegistry) {
+	UnfinishedTaskAppNameExpansionStrategy(AppRegistryService appRegistry) {
 		this.appRegistry = appRegistry;
 	}
 

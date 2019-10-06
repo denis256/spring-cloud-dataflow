@@ -1,11 +1,11 @@
 /*
- * Copyright 2016-2018 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -26,23 +26,26 @@ import org.junit.Ignore;
 import org.junit.Test;
 
 import org.springframework.beans.factory.BeanCreationException;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.boot.autoconfigure.context.PropertyPlaceholderAutoConfiguration;
-import org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration;
+import org.springframework.boot.autoconfigure.jackson.JacksonAutoConfiguration;
 import org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration;
 import org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration;
-import org.springframework.boot.autoconfigure.security.SecurityAutoConfiguration;
-import org.springframework.boot.autoconfigure.web.WebClientAutoConfiguration;
-import org.springframework.boot.test.util.EnvironmentTestUtils;
+import org.springframework.boot.autoconfigure.security.servlet.SecurityAutoConfiguration;
+import org.springframework.boot.autoconfigure.web.client.RestTemplateAutoConfiguration;
+import org.springframework.boot.test.util.TestPropertyValues;
 import org.springframework.cloud.dataflow.server.EnableDataFlowServer;
+import org.springframework.cloud.dataflow.server.config.features.SchedulerConfiguration;
 import org.springframework.cloud.dataflow.server.config.web.WebConfiguration;
-import org.springframework.cloud.dataflow.server.repository.StreamDeploymentRepository;
-import org.springframework.cloud.dataflow.server.service.TaskService;
-import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskService;
+import org.springframework.cloud.dataflow.server.service.StreamValidationService;
+import org.springframework.cloud.dataflow.server.service.TaskExecutionService;
+import org.springframework.cloud.dataflow.server.service.impl.DefaultTaskExecutionService;
 import org.springframework.cloud.dataflow.server.support.TestUtils;
+import org.springframework.cloud.deployer.autoconfigure.ResourceLoadingAutoConfiguration;
 import org.springframework.cloud.deployer.spi.app.AppDeployer;
+import org.springframework.cloud.deployer.spi.scheduler.Scheduler;
 import org.springframework.cloud.deployer.spi.task.TaskLauncher;
 import org.springframework.cloud.skipper.client.SkipperClient;
+import org.springframework.cloud.task.configuration.SimpleTaskAutoConfiguration;
 import org.springframework.cloud.task.repository.TaskRepository;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
@@ -55,7 +58,6 @@ import org.springframework.security.authentication.AuthenticationManager;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 
 /**
@@ -74,11 +76,13 @@ public class DataFlowServerConfigurationTests {
 	public void setup() {
 		context = new AnnotationConfigApplicationContext();
 		context.setId("testDataFlowConfig");
-		context.register(DataFlowServerConfigurationTests.TestConfiguration.class, RedisAutoConfiguration.class,
+		context.register(DataFlowServerConfigurationTests.TestConfiguration.class,
 				SecurityAutoConfiguration.class, DataFlowServerAutoConfiguration.class,
 				DataFlowControllerAutoConfiguration.class, DataSourceAutoConfiguration.class,
 				DataFlowServerConfiguration.class, PropertyPlaceholderAutoConfiguration.class,
-				WebClientAutoConfiguration.class, HibernateJpaAutoConfiguration.class, WebConfiguration.class);
+				RestTemplateAutoConfiguration.class, HibernateJpaAutoConfiguration.class, WebConfiguration.class,
+				SchedulerConfiguration.class, JacksonAutoConfiguration.class, SimpleTaskAutoConfiguration.class,
+				ResourceLoadingAutoConfiguration.class);
 		environment = new StandardEnvironment();
 		propertySources = environment.getPropertySources();
 	}
@@ -96,7 +100,7 @@ public class DataFlowServerConfigurationTests {
 	@Test
 	@Ignore
 	public void testStartEmbeddedH2Server() {
-		Map myMap = new HashMap();
+		Map<String, Object> myMap = new HashMap<>();
 		myMap.put("spring.datasource.url", "jdbc:h2:tcp://localhost:19092/mem:dataflow");
 		myMap.put("spring.dataflow.embedded.database.enabled", "true");
 		propertySources.addFirst(new MapPropertySource("EnvironmentTestPropsource", myMap));
@@ -115,7 +119,7 @@ public class DataFlowServerConfigurationTests {
 	@Test(expected = ConnectException.class)
 	public void testDoNotStartEmbeddedH2Server() throws Throwable {
 		Throwable exceptionResult = null;
-		Map myMap = new HashMap();
+		Map<String, Object> myMap = new HashMap<>();
 		myMap.put("spring.datasource.url", "jdbc:h2:tcp://localhost:19092/mem:dataflow");
 		myMap.put("spring.dataflow.embedded.database.enabled", "false");
 		myMap.put("spring.jpa.database", "H2");
@@ -135,7 +139,6 @@ public class DataFlowServerConfigurationTests {
 	 * Verify that the embedded server is not started if h2 string is not specified.
 	 */
 	@Test
-	@Ignore
 	public void testNoServer() {
 		context.refresh();
 		assertFalse(context.containsBean("initH2TCPServer"));
@@ -143,27 +146,12 @@ public class DataFlowServerConfigurationTests {
 
 	@Test
 	public void testSkipperConfig() throws Exception {
-		EnvironmentTestUtils.addEnvironment(context, "spring.cloud.skipper.client.serverUri:http://fakehost:1234/api",
-				"spring.cloud.dataflow.features.skipper-enabled:true");
+		TestPropertyValues.of("spring.cloud.skipper.client.serverUri=https://fakehost:1234/api").applyTo(context);
 		this.context.refresh();
 		SkipperClient skipperClient = context.getBean(SkipperClient.class);
 		Object baseUri = TestUtils.readField("baseUri", skipperClient);
 		assertNotNull(baseUri);
-		assertTrue(baseUri.equals("http://fakehost:1234/api"));
-		try {
-			this.context.getBean(StreamDeploymentRepository.class);
-			fail("StreamDeploymentRepository shouldn't exist. Exception expected");
-		}
-		catch (NoSuchBeanDefinitionException e) {
-		}
-	}
-
-	@Test
-	public void testAppDeployerConfig() throws Exception {
-		EnvironmentTestUtils.addEnvironment(this.context, "spring.cloud.dataflow.features.skipper-enabled:false");
-		this.context.refresh();
-		StreamDeploymentRepository streamDeploymentRepository = this.context.getBean(StreamDeploymentRepository.class);
-		assertNotNull(streamDeploymentRepository);
+		assertTrue(baseUri.equals("https://fakehost:1234/api"));
 	}
 
 	@EnableDataFlowServer
@@ -185,13 +173,23 @@ public class DataFlowServerConfigurationTests {
 		}
 
 		@Bean
-		public TaskService taskService() {
-			return mock(DefaultTaskService.class);
+		public TaskExecutionService taskService() {
+			return mock(DefaultTaskExecutionService.class);
 		}
 
 		@Bean
 		public TaskRepository taskRepository() {
 			return mock(TaskRepository.class);
+		}
+
+		@Bean
+		public Scheduler scheduler() {
+			return mock(Scheduler.class);
+		}
+
+		@Bean
+		public StreamValidationService streamValidationService() {
+			return mock(StreamValidationService.class);
 		}
 	}
 }

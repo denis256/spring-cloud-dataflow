@@ -1,11 +1,11 @@
 /*
- * Copyright 2016 the original author or authors.
+ * Copyright 2016-2019 the original author or authors.
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -31,6 +31,7 @@ import java.util.Set;
 import org.springframework.boot.configurationmetadata.ConfigurationMetadataGroup;
 import org.springframework.boot.configurationmetadata.ConfigurationMetadataProperty;
 import org.springframework.boot.configurationmetadata.ConfigurationMetadataRepositoryJsonBuilder;
+import org.springframework.boot.configurationmetadata.Deprecation.Level;
 import org.springframework.boot.loader.archive.Archive;
 import org.springframework.boot.loader.archive.ExplodedArchive;
 import org.springframework.boot.loader.archive.JarFileArchive;
@@ -53,7 +54,10 @@ public class BootApplicationConfigurationMetadataResolver extends ApplicationCon
 
 	private static final String CONFIGURATION_METADATA_PATTERN = "classpath*:/META-INF/spring-configuration-metadata.json";
 
-	private static final String WHITELIST_PROPERTIES = "classpath*:/META-INF/spring-configuration-metadata-whitelist.properties";
+	// this is superseded with name prefixed with dataflow and will get removed in future
+	private static final String WHITELIST_LEGACY_PROPERTIES = "classpath*:/META-INF/spring-configuration-metadata-whitelist.properties";
+
+	private static final String WHITELIST_PROPERTIES = "classpath*:/META-INF/dataflow-configuration-metadata-whitelist.properties";
 
 	private static final String CONFIGURATION_PROPERTIES_CLASSES = "configuration-properties.classes";
 
@@ -73,23 +77,34 @@ public class BootApplicationConfigurationMetadataResolver extends ApplicationCon
 		this.parent = parent;
 		JarFile.registerUrlProtocolHandler();
 		try {
+			// read both formats and concat
+			Resource[] globalLegacyResources = new PathMatchingResourcePatternResolver(
+					ApplicationConfigurationMetadataResolver.class.getClassLoader())
+							.getResources(WHITELIST_LEGACY_PROPERTIES);
 			Resource[] globalResources = new PathMatchingResourcePatternResolver(
-					ApplicationConfigurationMetadataResolver.class.getClassLoader()).getResources(WHITELIST_PROPERTIES);
-			loadWhiteLists(globalResources, globalWhiteListedClasses, globalWhiteListedProperties);
+					ApplicationConfigurationMetadataResolver.class.getClassLoader())
+							.getResources(WHITELIST_PROPERTIES);
+			loadWhiteLists(concatArrays(globalLegacyResources, globalResources), globalWhiteListedClasses,
+					globalWhiteListedProperties);
 		}
 		catch (IOException e) {
 			throw new RuntimeException("Error reading global white list of configuration properties", e);
 		}
 	}
 
+	private static Resource[] concatArrays(final Resource[]... arrays) {
+		return Arrays.stream(arrays).flatMap(Arrays::stream).toArray(Resource[]::new);
+	}
+
 	/**
 	 * Return metadata about configuration properties that are documented via <a href=
-	 * "http://docs.spring.io/spring-boot/docs/current/reference/html/configuration-metadata.html">
+	 * "https://docs.spring.io/spring-boot/docs/current/reference/html/configuration-metadata.html">
 	 * Spring Boot configuration metadata</a> and visible in an app.
 	 *
 	 * @param app a Spring Cloud Stream app; typically a Boot uberjar, but directories are
 	 * supported as well
 	 */
+	@Override
 	public List<ConfigurationMetadataProperty> listProperties(Resource app, boolean exhaustive) {
 		try {
 			if (app != null) {
@@ -98,7 +113,9 @@ public class BootApplicationConfigurationMetadataResolver extends ApplicationCon
 			}
 		}
 		catch (IOException e) {
+			throw new RuntimeException("Failed to resolve application resource: " + app.getDescription());
 		}
+
 		return Collections.emptyList();
 	}
 
@@ -108,30 +125,42 @@ public class BootApplicationConfigurationMetadataResolver extends ApplicationCon
 			ResourcePatternResolver moduleResourceLoader = new PathMatchingResourcePatternResolver(moduleClassLoader);
 			Collection<String> whiteListedClasses = new HashSet<>(globalWhiteListedClasses);
 			Collection<String> whiteListedProperties = new HashSet<>(globalWhiteListedProperties);
+
+			// read both formats and concat
+			Resource[] whitelistLegacyDescriptors = moduleResourceLoader.getResources(WHITELIST_LEGACY_PROPERTIES);
 			Resource[] whitelistDescriptors = moduleResourceLoader.getResources(WHITELIST_PROPERTIES);
-			boolean include = (whitelistDescriptors.length == 0) || exhaustive;
-			// when no descriptors return everything
-			loadWhiteLists(whitelistDescriptors, whiteListedClasses, whiteListedProperties);
+			loadWhiteLists(concatArrays(whitelistLegacyDescriptors, whitelistDescriptors), whiteListedClasses,
+					whiteListedProperties);
+
 			ConfigurationMetadataRepositoryJsonBuilder builder = ConfigurationMetadataRepositoryJsonBuilder.create();
 			for (Resource r : moduleResourceLoader.getResources(CONFIGURATION_METADATA_PATTERN)) {
 				builder.withJsonResource(r.getInputStream());
 			}
 			for (ConfigurationMetadataGroup group : builder.build().getAllGroups().values()) {
-				if (include || isWhiteListed(group, whiteListedClasses)) {
-					result.addAll(group.getProperties().values());
+				if (exhaustive || isWhiteListed(group, whiteListedClasses)) {
+					for (ConfigurationMetadataProperty property : group.getProperties().values()) {
+						if (!isDeprecatedError(property)) {
+							result.add(property);
+						}
+					}
+
 				} // Props in the root group have an id that looks prefixed itself. Handle
 				// here
 				else if ("_ROOT_GROUP_".equals(group.getId())) {
 					for (ConfigurationMetadataProperty property : group.getProperties().values()) {
 						if (isWhiteListed(property, whiteListedProperties)) {
-							result.add(property);
+							if (!isDeprecatedError(property)) {
+								result.add(property);
+							}
 						}
 					}
 				}
 				else { // Look for per property WL
 					for (ConfigurationMetadataProperty property : group.getProperties().values()) {
 						if (isWhiteListed(property, whiteListedProperties)) {
-							result.add(property);
+							if (!isDeprecatedError(property)) {
+								result.add(property);
+							}
 						}
 					}
 				}
@@ -150,7 +179,7 @@ public class BootApplicationConfigurationMetadataResolver extends ApplicationCon
 			return new BootClassLoaderFactory(resolveAsArchive(app), parent).createClassLoader();
 		}
 		catch (IOException e) {
-			throw new RuntimeException(e);
+			throw new RuntimeException("Failed to resolve application resource: " + app.getDescription(), e);
 		}
 	}
 
@@ -181,6 +210,16 @@ public class BootApplicationConfigurationMetadataResolver extends ApplicationCon
 	 */
 	private boolean isWhiteListed(ConfigurationMetadataProperty property, Collection<String> properties) {
 		return properties.contains(property.getId());
+	}
+
+	/**
+	 * Checks if property is error deprecated.
+	 *
+	 * @param property the configuration property
+	 * @return if property is error deprecated
+	 */
+	private boolean isDeprecatedError(ConfigurationMetadataProperty property) {
+		return property.getDeprecation() != null && property.getDeprecation().getLevel() == Level.ERROR;
 	}
 
 	/**

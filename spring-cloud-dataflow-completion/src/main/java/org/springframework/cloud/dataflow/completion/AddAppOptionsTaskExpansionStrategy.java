@@ -5,7 +5,7 @@
  * you may not use this file except in compliance with the License.
  * You may obtain a copy of the License at
  *
- *      http://www.apache.org/licenses/LICENSE-2.0
+ *      https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -21,10 +21,10 @@ import java.util.List;
 import java.util.Set;
 
 import org.springframework.cloud.dataflow.configuration.metadata.ApplicationConfigurationMetadataResolver;
+import org.springframework.cloud.dataflow.core.AppRegistration;
 import org.springframework.cloud.dataflow.core.ApplicationType;
 import org.springframework.cloud.dataflow.core.TaskDefinition;
-import org.springframework.cloud.dataflow.registry.AppRegistryCommon;
-import org.springframework.cloud.dataflow.registry.domain.AppRegistration;
+import org.springframework.cloud.dataflow.registry.service.AppRegistryService;
 
 /**
  * Adds missing application configuration properties at the end of a well formed task
@@ -39,7 +39,7 @@ class AddAppOptionsTaskExpansionStrategy implements TaskExpansionStrategy {
 
 	private final ProposalsCollectorSupportUtils collectorSupport;
 
-	public AddAppOptionsTaskExpansionStrategy(AppRegistryCommon appRegistry,
+	public AddAppOptionsTaskExpansionStrategy(AppRegistryService appRegistry,
 			ApplicationConfigurationMetadataResolver metadataResolver) {
 		this.collectorSupport = new ProposalsCollectorSupportUtils(appRegistry, metadataResolver);
 	}
